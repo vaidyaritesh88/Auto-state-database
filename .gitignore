@@ -1,0 +1,15 @@
+# Excel source data (large, proprietary)
+*.xlsx
+*.xls
+
+# JSON intermediate data
+data.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python
+__pycache__/
+*.pyc
