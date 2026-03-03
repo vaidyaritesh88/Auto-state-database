@@ -158,6 +158,7 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
   <div class="nav-tab active" data-tab="overview">Industry Overview</div>
   <div class="nav-tab" data-tab="company">Company Deep-Dive</div>
   <div class="nav-tab" data-tab="state">State Deep-Dive</div>
+  <div class="nav-tab" data-tab="zone">Zone Deep-Dive</div>
   <div class="nav-tab" data-tab="chat">&#128172; Chat</div>
   <div class="nav-tab" data-tab="data" style="margin-left:auto;color:#9ca3af">&#9881; Data</div>
 </div>
@@ -182,6 +183,13 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
   <div class="chart-row">
     <div class="chart-card"><div class="chart-title" id="title-ov-vol">Industry Volume Trend</div><div id="chart-ov-vol" style="height:300px"></div></div>
     <div class="chart-card"><div class="chart-title">Market Share Trend - Top Companies</div><div id="chart-ov-share" style="height:300px"></div></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-card full"><div class="chart-title">YoY Volume Growth Trend (%)</div><div id="chart-ov-yoy" style="height:280px"></div></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-card"><div class="chart-title" id="title-ov-zone-split">Zone Volume Split</div><div id="chart-ov-zone-split" style="height:300px"></div></div>
+    <div class="chart-card"><div class="chart-title">Zone Contribution Trend (%)</div><div id="chart-ov-zone-trend" style="height:300px"></div></div>
   </div>
   <div class="table-wrap">
     <div class="chart-title">Company Rankings (<span id="ov-latest-qtr"></span>)</div>
@@ -270,6 +278,47 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
   <div class="table-wrap">
     <div class="chart-title">Company Rankings in State</div>
     <table id="table-st-companies"><thead></thead><tbody></tbody></table>
+  </div>
+</div>
+
+<!-- ZONE DEEP-DIVE PANEL -->
+<div class="panel" id="panel-zone">
+  <div class="filter-bar">
+    <label>Zone:</label>
+    <select id="sel-zone-tab"></select>
+    <div class="sep"></div>
+    <label>View:</label>
+    <div class="subseg-chips" id="viewChips-zone">
+      <div class="view-chip active" data-view="quarterly">Quarterly</div>
+      <div class="view-chip" data-view="annual">Annual</div>
+    </div>
+    <div class="sep"></div>
+    <label>Period:</label>
+    <select id="sel-period-zone"></select>
+    <div class="sep"></div>
+    <label>Subsegment:</label>
+    <div class="subseg-chips" id="subsegChips-zone"></div>
+  </div>
+  <div class="kpi-row" id="kpi-zone"></div>
+  <div class="chart-row">
+    <div class="chart-card"><div class="chart-title" id="title-zn-vol">Zone Volume Trend</div><div id="chart-zn-vol" style="height:300px"></div></div>
+    <div class="chart-card"><div class="chart-title" id="title-zn-pie">Market Share Breakdown</div><div id="chart-zn-pie" style="height:300px"></div></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-card"><div class="chart-title">Market Share Trends - Top Companies</div><div id="chart-zn-share" style="height:300px"></div></div>
+    <div class="chart-card"><div class="chart-title">YoY Volume Growth Trend (%)</div><div id="chart-zn-yoy" style="height:300px"></div></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-card"><div class="chart-title" id="title-zn-states">States by Volume</div><div id="chart-zn-states" style="height:400px"></div></div>
+    <div class="chart-card"><div class="chart-title" id="title-zn-state-contrib">State Contribution Trend (%)</div><div id="chart-zn-state-contrib" style="height:400px"></div></div>
+  </div>
+  <div class="table-wrap">
+    <div class="chart-title" id="title-zn-state-table">State-wise Details</div>
+    <table id="table-zn-states"><thead></thead><tbody></tbody></table>
+  </div>
+  <div class="table-wrap">
+    <div class="chart-title" id="title-zn-comp-table">Company Rankings in Zone</div>
+    <table id="table-zn-companies"><thead></thead><tbody></tbody></table>
   </div>
 </div>
 
@@ -399,9 +448,10 @@ let currentCompany = '';
 let currentZone = 'All';
 let currentState = '';
 let currentGeo = 'state'; // 'state' or 'zone' — for company deep-dive geo breakdown
+let currentZoneTab = ''; // selected zone on the Zone Deep-Dive tab
 let viewMode = 'quarterly'; // per-tab
-const viewModes = {overview:'quarterly', company:'quarterly', state:'quarterly', chat:'quarterly'};
-const selectedPeriods = {overview: NQ-1, company: NQ-1, state: NQ-1, chat: NQ-1};
+const viewModes = {overview:'quarterly', company:'quarterly', state:'quarterly', zone:'quarterly', chat:'quarterly'};
+const selectedPeriods = {overview: NQ-1, company: NQ-1, state: NQ-1, zone: NQ-1, chat: NQ-1};
 
 // Chat state
 let chatHistory = []; // [{id, role, content, timestamp, saved, renderedHTML}]
@@ -530,9 +580,9 @@ const QDATES = quarterDates();
 const QLABELS = Q.map(q => q[1]+'Q'+q.slice(2)); // "1QFY17","2QFY17",...
 
 // Top N companies by volume in selected period
-function topCompanies(n, sub, state) {
+function topCompanies(n, sub, state, zone) {
   const volMap = {};
-  const rows = state ? filterRows(null,state,sub) : filterRows(null,null,sub);
+  const rows = filterRows(null, state, sub, zone);
   for (const i of rows) {
     const c = ROWS[i][4];
     volMap[c] = (volMap[c]||0) + periodQIdxs().reduce((s,qi) => s+(ROWS[i][5+qi]||0), 0);
@@ -706,6 +756,46 @@ function renderOverview() {
       hovertemplate:c+': %{y:.1f}%<extra></extra>'};
   });
   plotLines('chart-ov-share',shareTraces,'Market Share (%)',true);
+
+  // YoY Growth Trend
+  const indYoYOv = yoyGrowthSeries(indQ);
+  const top3Ov = topCompanies(3, sub, null);
+  const yoyTracesOv = [
+    {x:tsDates(),y:indYoYOv,type:'scatter',mode:'lines+markers',name:'Industry',line:{color:'#2563eb',width:2.5},marker:{size:4},connectgaps:false,hovertemplate:'Industry: %{y:.1f}%<extra></extra>'}
+  ];
+  top3Ov.forEach((c,ci) => {
+    const yoy = yoyGrowthSeries(getCompanyVols(c, sub));
+    yoyTracesOv.push({x:tsDates(),y:yoy,type:'scatter',mode:'lines',name:c,line:{color:getColor(c,ci+1),width:1.5},connectgaps:false,hovertemplate:c+': %{y:.1f}%<extra></extra>'});
+  });
+  plotYoYGrowth('chart-ov-yoy', yoyTracesOv);
+
+  // Zone Volume Split (donut)
+  document.getElementById('title-ov-zone-split').textContent = 'Zone Volume Split (' + periodLabel() + ')';
+  const pQsOv = periodQIdxs();
+  const zoneLabels=[], zoneVals=[], zoneColors=[];
+  const ZONE_COLORS = ['#2563eb','#dc2626','#059669','#d97706','#7c3aed','#db2777','#0891b2','#65a30d','#ea580c','#4f46e5'];
+  segZones.forEach((z,zi) => {
+    const zv = getZoneIndustryVols(z, sub);
+    const vol = pQsOv.reduce((s,qi)=>s+(zv[qi]||0),0);
+    if (vol > 0) {
+      zoneLabels.push(z); zoneVals.push(vol); zoneColors.push(ZONE_COLORS[zi % ZONE_COLORS.length]);
+    }
+  });
+  plotDonut('chart-ov-zone-split', zoneLabels, zoneVals, zoneColors);
+
+  // Zone Contribution Trend (lines)
+  const znContribTraces = [];
+  segZones.forEach((z,zi) => {
+    const zv = getZoneIndustryVols(z, sub);
+    const zTS = tsVols(zv);
+    const contribTS = zTS.map((v,t) => tsV[t]>0 ? v/tsV[t]*100 : 0);
+    znContribTraces.push({
+      x:tsDates(), y:contribTS, type:'scatter', mode:'lines+markers',
+      name:z, line:{color:ZONE_COLORS[zi % ZONE_COLORS.length],width:2}, marker:{size:3},
+      hovertemplate:z+': %{y:.1f}%<extra></extra>'
+    });
+  });
+  plotLines('chart-ov-zone-trend', znContribTraces, 'Contribution (%)', true);
 
   // Company table
   renderOverviewTable(sub);
@@ -1093,6 +1183,200 @@ function renderStateView() {
 }
 
 // ============================================
+// ZONE DEEP-DIVE
+// ============================================
+function renderZoneView() {
+  const zone = currentZoneTab, sub = currentSubseg;
+  if (!zone) return;
+
+  const znIndQ = getZoneIndustryVols(zone, sub);
+  const curVol = periodVol(znIndQ);
+  const yoyV = yoyPeriodVol(znIndQ);
+  const growth = yoyV > 0 ? ((curVol/yoyV-1)*100) : 0;
+  const natVol = periodVol(getIndustryVols(sub));
+
+  const top = topCompanies(8, sub, null, zone);
+  const topShares = top.map(c => {
+    const cv = getZoneCompanyVols(zone, c, sub);
+    const v = periodVol(cv);
+    return {company:c, share:curVol>0?v/curVol*100:0};
+  });
+
+  const vm = getViewMode();
+  document.getElementById('title-zn-vol').textContent = 'Zone Volume Trend (' + (vm==='annual'?'Annual':'Quarterly') + ')';
+  document.getElementById('title-zn-pie').textContent = 'Market Share Breakdown (' + periodLabel() + ')';
+  document.getElementById('title-zn-states').textContent = 'States by Volume (' + periodLabel() + ')';
+  document.getElementById('title-zn-state-contrib').textContent = 'State Contribution Trend (%)';
+  document.getElementById('title-zn-state-table').textContent = 'State-wise Details (' + periodLabel() + ')';
+  document.getElementById('title-zn-comp-table').textContent = 'Company Rankings in ' + zone + ' (' + periodLabel() + ')';
+
+  // KPIs
+  document.getElementById('kpi-zone').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Zone Volume (${periodLabel()})</div><div class="kpi-value">${fmt(curVol)}</div><div class="kpi-sub ${growth>=0?'positive':'negative'}">YoY: ${growth>=0?'+':''}${growth.toFixed(1)}%</div></div>
+    <div class="kpi"><div class="kpi-label">% of National Volume</div><div class="kpi-value">${(natVol>0?(curVol/natVol*100):0).toFixed(1)}%</div></div>
+    <div class="kpi"><div class="kpi-label">#1 Company</div><div class="kpi-value" style="font-size:18px">${topShares[0]?.company||'-'}</div><div class="kpi-sub neutral">${topShares[0]?.share.toFixed(1)||0}% share</div></div>
+    <div class="kpi"><div class="kpi-label">#2 Company</div><div class="kpi-value" style="font-size:18px">${topShares[1]?.company||'-'}</div><div class="kpi-sub neutral">${topShares[1]?.share.toFixed(1)||0}% share</div></div>
+  `;
+
+  // Volume trend
+  const tsV = tsVols(znIndQ);
+  plotLines('chart-zn-vol',[{
+    x:tsDates(),y:tsV,type:'scatter',mode:'lines+markers',name:'Volume',
+    line:{color:'#2563eb',width:2.5},marker:{size:4},
+    fill:'tozeroy',fillcolor:'rgba(37,99,235,0.08)',
+    hovertemplate:'%{x}: %{y:,.0f}<extra></extra>'
+  }],'Volume (units)',false);
+
+  // Market share donut (selected period)
+  const pQs = periodQIdxs();
+  const allComps = topCompanies(20, sub, null, zone);
+  const pieLabels=[],pieValues=[],pieColors=[];
+  let othersVol=0;
+  allComps.forEach((c,ci) => {
+    const cv = getZoneCompanyVols(zone, c, sub);
+    const v = pQs.reduce((s,qi)=>s+(cv[qi]||0),0);
+    if (ci<8 && v>0){pieLabels.push(c);pieValues.push(v);pieColors.push(getColor(c,ci));}
+    else othersVol+=v;
+  });
+  if (othersVol>0){pieLabels.push('Others');pieValues.push(othersVol);pieColors.push('#d1d5db');}
+  plotDonut('chart-zn-pie',pieLabels,pieValues,pieColors);
+
+  // Market share trend - top 10 companies in zone
+  const top10 = topCompanies(10, sub, null, zone);
+  const shareTraces = top10.map((c,ci) => {
+    const cv = getZoneCompanyVols(zone, c, sub);
+    const share = computeShare(tsVols(cv), tsV);
+    return {x:tsDates(),y:share,type:'scatter',mode:'lines',name:c,line:{color:getColor(c,ci),width:2},
+      hovertemplate:c+': %{y:.1f}%<extra></extra>'};
+  });
+  plotLines('chart-zn-share',shareTraces,'Market Share (%)',true);
+
+  // YoY growth trend - zone vs national + top 3 companies
+  const znYoY = yoyGrowthSeries(znIndQ);
+  const natYoY = yoyGrowthSeries(getIndustryVols(sub));
+  const top3 = topCompanies(3, sub, null, zone);
+  const yoyTraces = [
+    {x:tsDates(),y:znYoY,type:'scatter',mode:'lines+markers',name:zone+' Industry',line:{color:'#2563eb',width:2.5},marker:{size:4},connectgaps:false,hovertemplate:zone+': %{y:.1f}%<extra></extra>'},
+    {x:tsDates(),y:natYoY,type:'scatter',mode:'lines',name:'National Industry',line:{color:'#94a3b8',width:1.5,dash:'dot'},connectgaps:false,hovertemplate:'National: %{y:.1f}%<extra></extra>'}
+  ];
+  top3.forEach((c,ci) => {
+    const yoy = yoyGrowthSeries(getZoneCompanyVols(zone, c, sub));
+    yoyTraces.push({x:tsDates(),y:yoy,type:'scatter',mode:'lines',name:c,line:{color:getColor(c,ci+2),width:1.5},connectgaps:false,hovertemplate:c+': %{y:.1f}%<extra></extra>'});
+  });
+  plotYoYGrowth('chart-zn-yoy',yoyTraces);
+
+  // State breakdown within zone (horizontal bar)
+  const statesInZone = zoneStateMap[zone] || [];
+  const stateVols = {};
+  for (const st of statesInZone) {
+    const sv = getStateIndustryVols(st, sub);
+    const vol = pQs.reduce((s,qi)=>s+(sv[qi]||0),0);
+    if (vol > 0) stateVols[st] = vol;
+  }
+  const sortedStates = Object.entries(stateVols).sort((a,b)=>b[1]-a[1]);
+  plotHBar('chart-zn-states',
+    sortedStates.map(e=>e[0]).reverse(),
+    sortedStates.map(e=>e[1]).reverse(),
+    sortedStates.map(()=>'#2563eb').reverse()
+  );
+
+  // State contribution trend (top states within zone)
+  const topStates = sortedStates.slice(0,10).map(e=>e[0]);
+  const znTotalTS = tsV; // zone total volumes time-series
+  const stContribTraces = [];
+  topStates.forEach((st,si) => {
+    const stQ = getStateIndustryVols(st, sub);
+    const stTS = tsVols(stQ);
+    const contribTS = stTS.map((v,t) => znTotalTS[t]>0 ? v/znTotalTS[t]*100 : 0);
+    stContribTraces.push({
+      x:tsDates(), y:contribTS, type:'scatter', mode:'lines+markers',
+      name:st, line:{color:PALETTE[si%PALETTE.length],width:2}, marker:{size:3},
+      hovertemplate:st+': %{y:.1f}%<extra></extra>'
+    });
+  });
+  if (sortedStates.length > 10) {
+    const othersStates = sortedStates.slice(10).map(e=>e[0]);
+    const othersContrib = tsDates().map((_,t) => {
+      const topSum = topStates.reduce((s,st) => s + tsVols(getStateIndustryVols(st,sub))[t], 0);
+      return znTotalTS[t]>0 ? (znTotalTS[t]-topSum)/znTotalTS[t]*100 : 0;
+    });
+    stContribTraces.push({
+      x:tsDates(), y:othersContrib, type:'scatter', mode:'lines',
+      name:'Others', line:{color:'#d1d5db',width:1.5,dash:'dot'},
+      hovertemplate:'Others: %{y:.1f}%<extra></extra>'
+    });
+  }
+  plotLines('chart-zn-state-contrib', stContribTraces, 'Contribution (%)', true);
+
+  // State details table
+  const yoyQs = yoyPeriodQIdxs();
+  const stateDetails = sortedStates.map(([st, vol]) => {
+    const stIndQ = getStateIndustryVols(st, sub);
+    const sVol = pQs.reduce((s,qi)=>s+(stIndQ[qi]||0),0);
+    const sYoyVol = yoyQs.reduce((s,qi)=>s+(stIndQ[qi]||0),0);
+    const sGrowth = sYoyVol>0?((sVol/sYoyVol-1)*100):0;
+    const sShare = curVol>0?sVol/curVol*100:0;
+    const znIndYoy = yoyQs.reduce((s,qi)=>s+(znIndQ[qi]||0),0);
+    const sShareYoy = znIndYoy>0?sYoyVol/znIndYoy*100:0;
+    return {state:st,vol:sVol,yoyVol:sYoyVol,growth:sGrowth,share:sShare,shareChg:sShare-sShareYoy,contrib:curVol>0?sVol/curVol*100:0};
+  }).filter(d=>d.vol>0);
+  const stTotVol=stateDetails.reduce((s,d)=>s+d.vol,0);
+  const stTotYoy=stateDetails.reduce((s,d)=>s+d.yoyVol,0);
+  const stTotG=stTotYoy>0?((stTotVol/stTotYoy-1)*100):0;
+
+  const stThead = document.querySelector('#table-zn-states thead');
+  stThead.innerHTML = '<tr><th>#</th><th>State</th><th class="align-right">Volume</th><th class="align-right">YoY Vol</th><th class="align-right">YoY Growth</th><th class="align-right">Share of Zone</th><th class="align-right">Share Chg</th></tr>';
+  const stTbody = document.querySelector('#table-zn-states tbody');
+  stTbody.innerHTML = stateDetails.map((d,i) => `
+    <tr class="clickable" onclick="drillToState('${esc(d.state)}','${esc(zone)}')">
+      <td>${i+1}</td><td><b>${d.state}</b></td>
+      <td class="align-right">${fmt(d.vol)}</td><td class="align-right">${fmt(d.yoyVol)}</td>
+      <td class="align-right ${d.growth>=0?'positive':'negative'}">${d.growth>=0?'+':''}${d.growth.toFixed(1)}%</td>
+      <td class="align-right">${d.share.toFixed(1)}%</td>
+      <td class="align-right"><span class="badge ${d.shareChg>=0?'badge-green':'badge-red'}">${fmtPP(d.shareChg)}</span></td>
+    </tr>`).join('') + `
+    <tr class="total-row"><td></td><td><b>TOTAL</b></td>
+      <td class="align-right"><b>${fmt(stTotVol)}</b></td><td class="align-right"><b>${fmt(stTotYoy)}</b></td>
+      <td class="align-right ${stTotG>=0?'positive':'negative'}"><b>${stTotG>=0?'+':''}${stTotG.toFixed(1)}%</b></td>
+      <td class="align-right"><b>100.0%</b></td><td class="align-right"></td>
+    </tr>`;
+
+  // Company rankings table within zone
+  const comps = topCompanies(50, sub, null, zone);
+  const compTableData = comps.map(c => {
+    const cv = getZoneCompanyVols(zone, c, sub);
+    const v = pQs.reduce((s,qi)=>s+(cv[qi]||0),0);
+    const yv = yoyQs.reduce((s,qi)=>s+(cv[qi]||0),0);
+    const g = yv>0?((v/yv-1)*100):0;
+    const s = curVol>0?v/curVol*100:0;
+    const znIndYoy2 = yoyQs.reduce((sum,qi)=>sum+(znIndQ[qi]||0),0);
+    const sy = znIndYoy2>0?yv/znIndYoy2*100:0;
+    return {company:c,vol:v,yoyVol:yv,growth:g,share:s,shareChg:s-sy};
+  }).filter(d=>d.vol>0);
+  compTableData.sort((a,b)=>b.vol-a.vol);
+  const cTotVol=compTableData.reduce((s,d)=>s+d.vol,0);
+  const cTotYoy=compTableData.reduce((s,d)=>s+d.yoyVol,0);
+  const cTotG=cTotYoy>0?((cTotVol/cTotYoy-1)*100):0;
+
+  const cThead = document.querySelector('#table-zn-companies thead');
+  cThead.innerHTML = '<tr><th>#</th><th>Company</th><th class="align-right">Volume</th><th class="align-right">YoY Vol</th><th class="align-right">YoY Growth</th><th class="align-right">Mkt Share</th><th class="align-right">Share Chg</th></tr>';
+  const cTbody = document.querySelector('#table-zn-companies tbody');
+  cTbody.innerHTML = compTableData.map((d,i) => `
+    <tr class="clickable" onclick="drillToCompany('${esc(d.company)}')">
+      <td>${i+1}</td><td><b>${d.company}</b></td>
+      <td class="align-right">${fmt(d.vol)}</td><td class="align-right">${fmt(d.yoyVol)}</td>
+      <td class="align-right ${d.growth>=0?'positive':'negative'}">${d.growth>=0?'+':''}${d.growth.toFixed(1)}%</td>
+      <td class="align-right">${d.share.toFixed(1)}%</td>
+      <td class="align-right"><span class="badge ${d.shareChg>=0?'badge-green':'badge-red'}">${fmtPP(d.shareChg)}</span></td>
+    </tr>`).join('') + `
+    <tr class="total-row"><td></td><td><b>TOTAL</b></td>
+      <td class="align-right"><b>${fmt(cTotVol)}</b></td><td class="align-right"><b>${fmt(cTotYoy)}</b></td>
+      <td class="align-right ${cTotG>=0?'positive':'negative'}"><b>${cTotG>=0?'+':''}${cTotG.toFixed(1)}%</b></td>
+      <td class="align-right"><b>100.0%</b></td><td class="align-right"></td>
+    </tr>`;
+}
+
+// ============================================
 // UI HELPERS
 // ============================================
 function esc(s) { return s.replace(/'/g,"\\\\'"); }
@@ -1150,6 +1434,14 @@ function updateDropdowns() {
   selZone.innerHTML = '<option value="All">All Zones</option>'+segZones.map(z=>`<option value="${z}">${z}</option>`).join('');
   selZone.value = currentZone;
   updateStateDropdown();
+  updateZoneTabDropdown();
+}
+
+function updateZoneTabDropdown() {
+  const sel = document.getElementById('sel-zone-tab');
+  sel.innerHTML = segZones.map(z=>`<option value="${z}" ${z===currentZoneTab?'selected':''}>${z}</option>`).join('');
+  if (!currentZoneTab || !segZones.includes(currentZoneTab)) currentZoneTab = segZones[0] || '';
+  sel.value = currentZoneTab;
 }
 
 function updateStateDropdown() {
@@ -1164,6 +1456,7 @@ function renderCurrentTab() {
   if (currentTab==='overview') renderOverview();
   else if (currentTab==='company') renderCompanyView();
   else if (currentTab==='state') renderStateView();
+  else if (currentTab==='zone') renderZoneView();
   else if (currentTab==='chat') renderChatTab();
   else if (currentTab==='data') renderDataTab();
 }
@@ -1178,6 +1471,11 @@ function drillToState(state, zone) {
   currentState = state;
   document.getElementById('sel-state').value = state;
   switchTab('state');
+}
+function drillToZone(zone) {
+  currentZoneTab = zone;
+  document.getElementById('sel-zone-tab').value = zone;
+  switchTab('zone');
 }
 
 // ============================================
@@ -1397,6 +1695,7 @@ document.querySelectorAll('.nav-tab').forEach(t=>t.onclick=()=>switchTab(t.datas
 document.getElementById('sel-company').onchange=function(){currentCompany=this.value;renderCurrentTab();};
 document.getElementById('sel-zone').onchange=function(){currentZone=this.value;updateStateDropdown();renderCurrentTab();};
 document.getElementById('sel-state').onchange=function(){currentState=this.value;renderCurrentTab();};
+document.getElementById('sel-zone-tab').onchange=function(){currentZoneTab=this.value;renderCurrentTab();};
 
 // View mode toggles
 document.querySelectorAll('[id^="viewChips-"]').forEach(container => {
@@ -1414,7 +1713,7 @@ document.querySelectorAll('[id^="viewChips-"]').forEach(container => {
 });
 
 // Period selectors
-['overview','company','state'].forEach(tab => {
+['overview','company','state','zone'].forEach(tab => {
   const sel = document.getElementById('sel-period-'+tab);
   if (sel) sel.onchange = function() {
     selectedPeriods[tab] = parseInt(this.value);
@@ -1864,7 +2163,7 @@ function removeChatApiKey() {
 // ============================================
 buildIndexes();
 updateDropdowns();
-['overview','company','state'].forEach(tab => populatePeriodSelector(tab));
+['overview','company','state','zone'].forEach(tab => populatePeriodSelector(tab));
 renderSubsegChips();
 syncViewChips();
 renderCurrentTab();
