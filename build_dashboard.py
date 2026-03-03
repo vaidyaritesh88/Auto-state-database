@@ -102,6 +102,45 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
 .btn-danger{background:#fff;color:#dc2626;border:1px solid #fecaca}.btn-danger:hover{background:#fef2f2;border-color:#dc2626}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.chat-setup{max-width:480px;margin:60px auto;text-align:center;background:#fff;border-radius:12px;padding:40px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.chat-setup h3{font-size:20px;color:#1f2937;margin-bottom:8px}
+.chat-setup p{font-size:13px;color:#6b7280;margin-bottom:16px}
+.chat-setup input[type=password]{width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box}
+.chat-setup .chat-help{font-size:11px;color:#9ca3af;margin-top:12px}
+.chat-setup .chat-help a{color:#2563eb}
+#chat-interface{display:flex;flex-direction:column;height:calc(100vh - 160px);min-height:500px}
+.chat-toolbar{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #e5e7eb;margin-bottom:8px;flex-shrink:0;flex-wrap:wrap;align-items:center}
+.chat-toolbar .chat-model-info{margin-left:auto;font-size:11px;color:#9ca3af}
+.chat-suggestions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px 0;flex-shrink:0}
+.chat-suggestion{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;cursor:pointer;text-align:left;transition:all 0.15s;font-size:12px;color:#374151;line-height:1.4}
+.chat-suggestion:hover{border-color:#2563eb;background:#eff6ff}
+.chat-suggestion .sug-icon{font-size:16px;margin-bottom:4px}
+.chat-messages{flex:1;overflow-y:auto;padding:8px 0;display:flex;flex-direction:column;gap:12px}
+.chat-msg{max-width:85%;padding:12px 16px;border-radius:12px;font-size:13px;line-height:1.6;position:relative;word-wrap:break-word}
+.chat-msg.user{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:4px}
+.chat-msg.assistant{align-self:flex-start;background:#fff;border:1px solid #e5e7eb;color:#1f2937;border-bottom-left-radius:4px}
+.chat-msg .msg-actions{display:none;position:absolute;top:4px;right:4px;gap:4px}
+.chat-msg:hover .msg-actions{display:flex}
+.msg-action-btn{background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px;opacity:0.6;transition:opacity 0.15s}
+.msg-action-btn:hover{opacity:1}
+.msg-action-btn.saved{opacity:1;color:#f59e0b}
+.chat-msg .msg-text p{margin:4px 0}
+.chat-msg .msg-text b,.chat-msg .msg-text strong{font-weight:600}
+.chat-msg .msg-text code{background:rgba(0,0,0,0.06);padding:1px 4px;border-radius:3px;font-size:12px;font-family:monospace}
+.chat-msg .msg-text ul,.chat-msg .msg-text ol{margin:4px 0 4px 18px;padding:0}
+.chat-code-result{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin:8px 0;font-family:monospace;font-size:12px;white-space:pre-wrap;color:#334155;max-height:200px;overflow-y:auto}
+.chat-code-error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+.chat-chart-container{margin:10px 0;border-radius:8px;overflow:hidden;min-height:300px}
+.chat-table-container{margin:8px 0;overflow-x:auto;max-height:400px;overflow-y:auto}
+.chat-table-container table{font-size:11px}
+.chat-input-area{display:flex;gap:8px;padding:12px 0;border-top:1px solid #e5e7eb;flex-shrink:0;align-items:flex-end}
+#chat-input{flex:1;padding:10px 14px;border:1px solid #d1d5db;border-radius:10px;font-size:13px;resize:none;font-family:inherit;max-height:120px;min-height:42px;line-height:1.4}
+#chat-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,0.15)}
+.typing-indicator{align-self:flex-start;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px 20px;display:flex;gap:4px}
+.typing-dot{width:6px;height:6px;background:#9ca3af;border-radius:50%;animation:typingBounce 1.2s infinite}
+.typing-dot:nth-child(2){animation-delay:0.2s}
+.typing-dot:nth-child(3){animation-delay:0.4s}
+@keyframes typingBounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 </style>
 </head>
 <body>
@@ -119,6 +158,7 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
   <div class="nav-tab active" data-tab="overview">Industry Overview</div>
   <div class="nav-tab" data-tab="company">Company Deep-Dive</div>
   <div class="nav-tab" data-tab="state">State Deep-Dive</div>
+  <div class="nav-tab" data-tab="chat">&#128172; Chat</div>
   <div class="nav-tab" data-tab="data" style="margin-left:auto;color:#9ca3af">&#9881; Data</div>
 </div>
 <div class="main">
@@ -234,6 +274,44 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
 </div>
 
 <!-- DATA MANAGEMENT PANEL -->
+<!-- CHAT PANEL -->
+<div class="panel" id="panel-chat">
+  <div id="chat-setup" class="chat-setup">
+    <h3>&#129302; Chat with Your Data</h3>
+    <p>Ask questions, create charts, run calculations on your auto industry data using AI.</p>
+    <input type="password" id="api-key-input" placeholder="Enter your Anthropic API key (sk-ant-...)">
+    <button class="btn btn-primary" id="btn-save-key" style="width:100%">Save &amp; Start Chatting</button>
+    <p class="chat-help">Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></p>
+  </div>
+  <div id="chat-interface" style="display:none">
+    <div class="chat-toolbar">
+      <button class="btn btn-outline" id="btn-chat-clear" style="font-size:12px;padding:4px 12px">&#128465; Clear</button>
+      <button class="btn btn-outline" id="btn-chat-export" style="font-size:12px;padding:4px 12px">&#128190; Export Saved</button>
+      <button class="btn btn-outline" id="btn-chat-remove-key" style="font-size:12px;padding:4px 12px">&#128274; Remove Key</button>
+      <span class="chat-model-info">Model: Claude Sonnet</span>
+    </div>
+    <div class="chat-suggestions" id="chat-suggestions">
+      <div class="chat-suggestion" data-prompt="What are the top 5 companies by market share in the latest quarter? Show a table.">
+        <div class="sug-icon">&#128202;</div>Top 5 companies by market share in the latest quarter
+      </div>
+      <div class="chat-suggestion" data-prompt="Plot the market share trend for the top 3 companies over the last 3 years as a line chart.">
+        <div class="sug-icon">&#128200;</div>Market share trend for top 3 companies (line chart)
+      </div>
+      <div class="chat-suggestion" data-prompt="Which states have seen the biggest market share gain and loss in the latest year vs previous year? Show top 5 gainers and losers.">
+        <div class="sug-icon">&#127919;</div>States with biggest share gain/loss vs last year
+      </div>
+      <div class="chat-suggestion" data-prompt="Calculate the industry CAGR from FY18 to FY25 and tell me which company has grown fastest.">
+        <div class="sug-icon">&#128640;</div>Industry CAGR &amp; fastest growing company
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-area">
+      <textarea id="chat-input" placeholder="Ask about your data... (Enter to send, Shift+Enter for new line)" rows="1"></textarea>
+      <button class="btn btn-primary" id="btn-chat-send">Send</button>
+    </div>
+  </div>
+</div>
+
 <div class="panel" id="panel-data">
   <div style="max-width:800px;margin:0 auto">
     <div class="status-msg" id="data-status"></div>
@@ -322,8 +400,14 @@ let currentZone = 'All';
 let currentState = '';
 let currentGeo = 'state'; // 'state' or 'zone' — for company deep-dive geo breakdown
 let viewMode = 'quarterly'; // per-tab
-const viewModes = {overview:'quarterly', company:'quarterly', state:'quarterly'};
-const selectedPeriods = {overview: NQ-1, company: NQ-1, state: NQ-1}; // quarter index or fy index
+const viewModes = {overview:'quarterly', company:'quarterly', state:'quarterly', chat:'quarterly'};
+const selectedPeriods = {overview: NQ-1, company: NQ-1, state: NQ-1, chat: NQ-1};
+
+// Chat state
+let chatHistory = []; // [{id, role, content, timestamp, saved, renderedHTML}]
+let chatApiKey = '';
+try { chatApiKey = localStorage.getItem('janchor_api_key') || ''; } catch(e) {}
+try { chatHistory = JSON.parse(localStorage.getItem('janchor_chat_history') || '[]'); } catch(e) { chatHistory = []; }
 
 function getViewMode() { return viewModes[currentTab]; }
 function getSelectedPeriod() { return selectedPeriods[currentTab]; }
@@ -1080,6 +1164,7 @@ function renderCurrentTab() {
   if (currentTab==='overview') renderOverview();
   else if (currentTab==='company') renderCompanyView();
   else if (currentTab==='state') renderStateView();
+  else if (currentTab==='chat') renderChatTab();
   else if (currentTab==='data') renderDataTab();
 }
 
@@ -1367,6 +1452,412 @@ document.getElementById('geoChips-company').querySelectorAll('.view-chip').forEa
     if (currentTab === 'company') renderCurrentTab();
   };
 });
+
+// ============================================
+// CHAT WITH DATA
+// ============================================
+function renderChatTab() {
+  const setup = document.getElementById('chat-setup');
+  const iface = document.getElementById('chat-interface');
+  if (!chatApiKey) { setup.style.display='block'; iface.style.display='none'; return; }
+  setup.style.display='none'; iface.style.display='flex';
+  const msgs = document.getElementById('chat-messages');
+  const sugs = document.getElementById('chat-suggestions');
+  if (chatHistory.length === 0) {
+    sugs.style.display='grid'; msgs.innerHTML='';
+  } else {
+    sugs.style.display='none';
+    renderAllChatMessages();
+  }
+}
+
+function renderAllChatMessages() {
+  const container = document.getElementById('chat-messages');
+  container.innerHTML = '';
+  chatHistory.forEach(msg => {
+    const div = createMsgDiv(msg);
+    container.appendChild(div);
+  });
+  container.scrollTop = container.scrollHeight;
+}
+
+function createMsgDiv(msg) {
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + msg.role;
+  div.id = 'msg-' + msg.id;
+  if (msg.role === 'user') {
+    div.textContent = msg.content;
+  } else {
+    const segments = parseAssistantResponse(msg.content);
+    const textDiv = document.createElement('div');
+    textDiv.className = 'msg-text';
+    segments.forEach(seg => renderSegment(seg, textDiv, msg.id));
+    div.appendChild(textDiv);
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'msg-action-btn' + (msg.saved ? ' saved' : '');
+    saveBtn.innerHTML = msg.saved ? '&#11088;' : '&#9734;';
+    saveBtn.title = msg.saved ? 'Unsave' : 'Save';
+    saveBtn.onclick = function(e) { e.stopPropagation(); toggleSaveMessage(msg.id); };
+    actions.appendChild(saveBtn);
+    div.appendChild(actions);
+  }
+  return div;
+}
+
+function simpleMarkdown(text) {
+  let html = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\\*\\*(.+?)\\*\\*/g,'<b>$1</b>')
+    .replace(/\\*(.+?)\\*/g,'<i>$1</i>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/^[\\-\\*] (.+)$/gm,'<li>$1</li>')
+    .replace(/^(\\d+)\\. (.+)$/gm,'<li>$2</li>');
+  // Wrap consecutive <li> in <ul>
+  html = html.replace(/((?:<li>.*?<\\/li>\\s*)+)/g,'<ul>$1</ul>');
+  html = html.replace(/\\n\\n/g,'</p><p>').replace(/\\n/g,'<br>');
+  return '<p>' + html + '</p>';
+}
+
+function parseAssistantResponse(text) {
+  const segments = [];
+  const regex = /```(js|javascript|chart|table)\\n([\\s\\S]*?)```/g;
+  let last = 0, match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) segments.push({type:'text', content:text.slice(last, match.index)});
+    let type = match[1];
+    if (type === 'javascript') type = 'js';
+    segments.push({type, content:match[2]});
+    last = regex.lastIndex;
+  }
+  if (last < text.length) segments.push({type:'text', content:text.slice(last)});
+  return segments;
+}
+
+function renderSegment(seg, container, msgId) {
+  if (seg.type === 'text') {
+    const d = document.createElement('div');
+    d.innerHTML = simpleMarkdown(seg.content.trim());
+    container.appendChild(d);
+  } else if (seg.type === 'js') {
+    const result = executeChatCode(seg.content);
+    const d = document.createElement('div');
+    d.className = 'chat-code-result' + (result.success ? '' : ' chat-code-error');
+    if (result.success) {
+      d.textContent = result.result !== undefined ? (typeof result.result === 'object' ? JSON.stringify(result.result, null, 2) : String(result.result)) : '(executed)';
+    } else {
+      d.textContent = 'Error: ' + result.error;
+    }
+    container.appendChild(d);
+  } else if (seg.type === 'chart') {
+    const chartDiv = document.createElement('div');
+    chartDiv.className = 'chat-chart-container';
+    const chartId = 'chat-chart-' + msgId + '-' + Date.now() + '-' + Math.random().toString(36).substr(2,4);
+    const plotDiv = document.createElement('div');
+    plotDiv.id = chartId;
+    plotDiv.style.height = '340px';
+    chartDiv.appendChild(plotDiv);
+    container.appendChild(chartDiv);
+    try {
+      const spec = JSON.parse(seg.content);
+      const traces = spec.data || spec.traces || [];
+      const layout = {...PLOTLY_LAYOUT, margin:{l:70,r:20,t:30,b:70}, ...(spec.layout||{})};
+      setTimeout(function(){ Plotly.newPlot(chartId, traces, layout, PLOTLY_CONFIG); }, 50);
+    } catch(e) {
+      plotDiv.textContent = 'Chart error: ' + e.message;
+      plotDiv.style.color = '#dc2626';
+      plotDiv.style.padding = '20px';
+    }
+  } else if (seg.type === 'table') {
+    const d = document.createElement('div');
+    d.className = 'chat-table-container';
+    try {
+      const spec = JSON.parse(seg.content);
+      let html = '<table><thead><tr>' + (spec.headers||[]).map(h=>'<th>'+h+'</th>').join('') + '</tr></thead><tbody>';
+      (spec.rows||[]).forEach(row => {
+        html += '<tr>' + row.map(c=>'<td'+(typeof c==='number'?' class="align-right"':'')+'>'+c+'</td>').join('') + '</tr>';
+      });
+      html += '</tbody></table>';
+      d.innerHTML = html;
+    } catch(e) {
+      d.textContent = 'Table error: ' + e.message;
+    }
+    container.appendChild(d);
+  }
+}
+
+function executeChatCode(code) {
+  try {
+    var result = eval(code);
+    return {success:true, result:result};
+  } catch(e) {
+    return {success:false, error:e.message};
+  }
+}
+
+function buildDataSummary() {
+  var lines = [];
+  lines.push('Current segment: ' + currentSegment);
+  lines.push('Subsegments: ' + segSubsegs.join(', '));
+  lines.push('Companies (' + segCompanies.length + '): ' + segCompanies.slice(0,20).join(', ') + (segCompanies.length>20?'...':''));
+  lines.push('States (' + segStates.length + '): ' + segStates.join(', '));
+  lines.push('Zones (' + segZones.length + '): ' + segZones.join(', '));
+  // Latest quarter industry total
+  var indQ = getIndustryVols('All');
+  lines.push('\\nIndustry total volume by recent quarters:');
+  for (var qi = Math.max(0,NQ-4); qi < NQ; qi++) {
+    lines.push('  ' + QLABELS[qi] + ': ' + indQ[qi].toLocaleString());
+  }
+  // Last 3 FY totals
+  var annInd = annualVols(indQ);
+  lines.push('\\nIndustry annual volume (last 4 FYs):');
+  for (var fi = Math.max(0,NFY-4); fi < NFY; fi++) {
+    var qtrs = FY_Q_IDXS[FYS[fi]].length;
+    lines.push('  ' + FYS[fi] + (qtrs<4?' (YTD, '+qtrs+'Q)':'') + ': ' + annInd[fi].toLocaleString());
+  }
+  // Top 10 companies latest quarter
+  lines.push('\\nTop 10 companies by volume in ' + QLABELS[NQ-1] + ':');
+  var compVols = segCompanies.map(function(c){ return {c:c, v:getCompanyVols(c,'All')[NQ-1]}; }).sort(function(a,b){return b.v-a.v;}).slice(0,10);
+  var latestInd = indQ[NQ-1];
+  compVols.forEach(function(d,i){ lines.push('  '+(i+1)+'. '+d.c+': '+d.v.toLocaleString()+' ('+((latestInd>0?d.v/latestInd*100:0).toFixed(1))+'% share)'); });
+  return lines.join('\\n');
+}
+
+function buildSystemPrompt() {
+  return 'You are an expert analyst for Indian auto industry state-wise primary sales data. You help answer questions, create charts, and do calculations.\\n\\n' +
+  'DATA STRUCTURE:\\n' +
+  '- ROWS: array of ' + ROWS.length + ' rows. Each row: [segment, subsegment, zone, state, manufacturer, vol_Q1FY17, vol_Q2FY17, ..., vol_Q2FY26]\\n' +
+  '- Volumes start at index 5. Quarter index 0 = Q1FY17, index ' + (NQ-1) + ' = ' + Q[NQ-1] + '\\n' +
+  '- Q: array of quarter labels ' + JSON.stringify(Q.slice(0,4)) + '...' + JSON.stringify(Q.slice(-2)) + ' (' + NQ + ' quarters)\\n' +
+  '- QLABELS: display labels like "1QFY17","2QFY17",...\\n' +
+  '- FYS: ' + JSON.stringify(FYS) + '\\n' +
+  '- FY_Q_IDXS: maps FY to quarter indices, e.g. FY17:[0,1,2,3], FY25:[32,33,34,35]\\n' +
+  '- FY26 is PARTIAL (' + (FY_Q_IDXS[FYS[NFY-1]]||[]).length + ' quarters only)\\n' +
+  '- Segments: ' + JSON.stringify([...new Set(ROWS.map(r=>r[0]))]) + '\\n\\n' +
+  'CURRENT CONTEXT:\\n' + buildDataSummary() + '\\n\\n' +
+  'AVAILABLE JS HELPER FUNCTIONS (all global, use in ```js blocks):\\n' +
+  '- filterRows(company, state, subseg, zone) -> array of row indices (pass null to skip filter, "All" for subseg means all)\\n' +
+  '- sumVolumes(rowIdxs) -> array of ' + NQ + ' quarterly volumes\\n' +
+  '- getIndustryVols(sub) -> quarterly industry volumes for subsegment\\n' +
+  '- getCompanyVols(co, sub) -> quarterly company volumes\\n' +
+  '- getStateIndustryVols(state, sub) -> quarterly state industry volumes\\n' +
+  '- getStateCompanyVols(state, company, sub) -> quarterly state+company volumes\\n' +
+  '- getZoneIndustryVols(zone, sub) -> quarterly zone industry volumes\\n' +
+  '- getZoneCompanyVols(zone, company, sub) -> quarterly zone+company volumes\\n' +
+  '- computeShare(companyVols, industryVols) -> array of percentages\\n' +
+  '- annualVols(qVols) -> sums quarterly array to annual FY array (length ' + NFY + ')\\n' +
+  '- fmt(n) -> formatted string with Cr/L/K suffix\\n' +
+  '- NQ=' + NQ + ', NFY=' + NFY + '\\n' +
+  '- QLABELS: array of display labels for quarters\\n' +
+  '- FYLABELS: array of FY labels\\n' +
+  '- PALETTE: array of 15 colors for charts\\n' +
+  '- COMPANY_COLORS: map of company name to hex color\\n\\n' +
+  'OUTPUT FORMATS:\\n' +
+  '1. Normal text: just write your analysis. Use **bold** and *italic* for emphasis.\\n' +
+  '2. JavaScript computation: wrap in ```js block. The LAST EXPRESSION is captured and displayed. Use this to compute values from the raw data.\\n' +
+  '3. Plotly chart: wrap in ```chart block with JSON: {"data": [array of Plotly trace objects], "layout": {optional layout overrides}}. Example trace: {"x":["Q1","Q2"],"y":[100,200],"type":"scatter","mode":"lines+markers","name":"Series1"}\\n' +
+  '4. Table: wrap in ```table block with JSON: {"headers": ["Col1","Col2",...], "rows": [[val1,val2,...], ...]}\\n\\n' +
+  'RULES:\\n' +
+  '- Always use try-catch in js blocks for safety\\n' +
+  '- For "All" subsegments, pass "All" as the sub parameter\\n' +
+  '- Quarter index mapping: Q1FY17=0, Q2FY17=1, ..., Q1FY26=36, Q2FY26=37\\n' +
+  '- In js blocks, the last expression value is shown to the user. Assign your final result to a variable or just write the expression last.\\n' +
+  '- For charts, use COMPANY_COLORS[companyName] or PALETTE[i] for colors\\n' +
+  '- Keep responses concise and data-driven\\n' +
+  '- When asked about trends, prefer charts. When asked for specific numbers, prefer tables.';
+}
+
+function addChatMessage(role, content, saved) {
+  var msg = {
+    id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
+    role: role,
+    content: content,
+    timestamp: new Date().toISOString(),
+    saved: saved || false
+  };
+  chatHistory.push(msg);
+  saveChatHistory();
+  return msg;
+}
+
+function saveChatHistory() {
+  try { localStorage.setItem('janchor_chat_history', JSON.stringify(chatHistory)); } catch(e) {}
+}
+
+function showTypingIndicator() {
+  var container = document.getElementById('chat-messages');
+  var div = document.createElement('div');
+  div.className = 'typing-indicator';
+  div.id = 'typing-indicator';
+  div.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeTypingIndicator() {
+  var el = document.getElementById('typing-indicator');
+  if (el) el.remove();
+}
+
+async function sendChatMessage(userText) {
+  if (!userText || !userText.trim()) return;
+  userText = userText.trim();
+  document.getElementById('chat-suggestions').style.display = 'none';
+
+  // Add user message
+  var userMsg = addChatMessage('user', userText);
+  var container = document.getElementById('chat-messages');
+  container.appendChild(createMsgDiv(userMsg));
+  container.scrollTop = container.scrollHeight;
+
+  // Clear input
+  document.getElementById('chat-input').value = '';
+  document.getElementById('chat-input').style.height = 'auto';
+
+  showTypingIndicator();
+
+  // Build messages for API (last 20 messages)
+  var apiMessages = chatHistory.slice(-21, -1).concat([{role:'user',content:userText}]).map(function(m){
+    return {role: m.role, content: m.content};
+  }).filter(function(m){ return m.role === 'user' || m.role === 'assistant'; });
+  // Ensure alternating user/assistant
+  var cleaned = [];
+  for (var i = 0; i < apiMessages.length; i++) {
+    if (cleaned.length === 0 || cleaned[cleaned.length-1].role !== apiMessages[i].role) {
+      cleaned.push(apiMessages[i]);
+    }
+  }
+  if (cleaned.length > 0 && cleaned[0].role !== 'user') cleaned.shift();
+
+  try {
+    var response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': chatApiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: buildSystemPrompt(),
+        messages: cleaned
+      })
+    });
+
+    removeTypingIndicator();
+
+    if (!response.ok) {
+      var errData = {};
+      try { errData = await response.json(); } catch(e2) {}
+      var errMsg = response.status === 401 ? 'Invalid API key. Please check your key in Settings.'
+        : response.status === 429 ? 'Rate limited. Please wait a moment and try again.'
+        : response.status === 529 ? 'Claude is overloaded. Please try again shortly.'
+        : 'API error (' + response.status + '): ' + (errData.error?.message || 'Unknown error');
+      var errMsgObj = addChatMessage('assistant', errMsg);
+      container.appendChild(createMsgDiv(errMsgObj));
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+
+    var data = await response.json();
+    var assistantText = (data.content && data.content[0] && data.content[0].text) || 'No response received.';
+
+    var assistantMsg = addChatMessage('assistant', assistantText);
+    container.appendChild(createMsgDiv(assistantMsg));
+    container.scrollTop = container.scrollHeight;
+
+  } catch(err) {
+    removeTypingIndicator();
+    var networkErr = addChatMessage('assistant', 'Network error: ' + err.message + '. Check your internet connection.');
+    container.appendChild(createMsgDiv(networkErr));
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+function toggleSaveMessage(msgId) {
+  for (var i = 0; i < chatHistory.length; i++) {
+    if (chatHistory[i].id === msgId) {
+      chatHistory[i].saved = !chatHistory[i].saved;
+      break;
+    }
+  }
+  saveChatHistory();
+  renderAllChatMessages();
+}
+
+function exportSavedMessages() {
+  var saved = chatHistory.filter(function(m){ return m.saved; });
+  if (saved.length === 0) { alert('No saved messages to export. Click the star icon on messages to save them.'); return; }
+  var md = '# Saved Chat Insights - ' + currentSegment + ' Segment\\n';
+  md += 'Exported: ' + new Date().toLocaleString() + '\\n\\n';
+  saved.forEach(function(m, i) {
+    md += '## Insight ' + (i+1) + '\\n';
+    md += m.content + '\\n\\n---\\n\\n';
+  });
+  var blob = new Blob([md], {type:'text/markdown'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'auto_insights_' + currentSegment + '_' + new Date().toISOString().slice(0,10) + '.md';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function clearChat() {
+  if (chatHistory.length === 0) return;
+  if (!confirm('Clear all chat messages? Saved messages will also be removed.')) return;
+  // Purge any Plotly charts
+  document.querySelectorAll('[id^="chat-chart-"]').forEach(function(el){ try{Plotly.purge(el.id);}catch(e){} });
+  chatHistory = [];
+  saveChatHistory();
+  renderChatTab();
+}
+
+function removeChatApiKey() {
+  if (!confirm('Remove your API key? You will need to re-enter it to use chat.')) return;
+  chatApiKey = '';
+  try { localStorage.removeItem('janchor_api_key'); } catch(e) {}
+  renderChatTab();
+}
+
+// Chat event listeners
+(function() {
+  document.getElementById('btn-save-key').onclick = function() {
+    var key = document.getElementById('api-key-input').value.trim();
+    if (!key || !key.startsWith('sk-')) { alert('Please enter a valid Anthropic API key (starts with sk-ant-...)'); return; }
+    chatApiKey = key;
+    try { localStorage.setItem('janchor_api_key', key); } catch(e) {}
+    renderChatTab();
+  };
+  document.getElementById('btn-chat-send').onclick = function() {
+    sendChatMessage(document.getElementById('chat-input').value);
+  };
+  document.getElementById('chat-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage(this.value);
+    }
+  });
+  // Auto-resize textarea
+  document.getElementById('chat-input').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+  document.getElementById('btn-chat-clear').onclick = clearChat;
+  document.getElementById('btn-chat-export').onclick = exportSavedMessages;
+  document.getElementById('btn-chat-remove-key').onclick = removeChatApiKey;
+  // Suggestion cards
+  document.querySelectorAll('.chat-suggestion').forEach(function(card) {
+    card.onclick = function() {
+      var prompt = this.dataset.prompt;
+      document.getElementById('chat-input').value = prompt;
+      sendChatMessage(prompt);
+    };
+  });
+})();
 
 // ============================================
 // INITIALIZE
