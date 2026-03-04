@@ -1,13 +1,223 @@
 #!/usr/bin/env python3
 """
 Janchor Auto Tracker - Dashboard Generator v2
-Fixes: bar-chart axes, adds period picker, annual toggle, YoY growth charts, total rows.
+
+Usage:
+  python build_dashboard.py                    # Build using existing data.json
+  python build_dashboard.py path/to/file.xlsx  # Convert Excel to data.json, then build
+                                               # Supports both old format and Kotak format
 """
-import json, os
+import json, os, sys, re
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(SCRIPT_DIR, 'data.json')
 OUTPUT_FILE = os.path.join(SCRIPT_DIR, 'dashboard.html')
+
+# ── OEM name cleanup (Kotak full legal names → short display names) ──────────
+OEM_NAME_MAP = {
+    'Maruti Suzuki India Ltd':'Maruti Suzuki','Hyundai Motor India Ltd':'Hyundai',
+    'Tata Motors Ltd':'Tata Motors','Mahindra & Mahindra Ltd':'M&M',
+    'Toyota Kirloskar Motor Pvt Ltd':'Toyota','Kia Motors':'Kia',
+    'Honda Cars India Ltd':'Honda','SkodaAuto India Pvt Ltd':'Skoda',
+    'Volkswagen India Pvt Ltd':'Volkswagen','Renault India Pvt Ltd':'Renault',
+    'Nissan Motor India Pvt Ltd':'Nissan','Ford India Pvt Ltd':'Ford',
+    'Fiat India Automobiles Pvt.Ltd':'Fiat India',
+    'General Motors India Pvt Ltd':'General Motors',
+    'Hindustan Motor Finance Corporation Ltd':'Hindustan Motor',
+    'Force Motors Ltd':'Force Motors','Isuzu Motors India Pvt Ltd':'Isuzu',
+    'PCA Motors Pvt Ltd':'PCA Motors','MG Motor':'MG Motor',
+    'Hero MotoCorp Ltd':'Hero',
+    'Honda Motorcycle & Scooter India (Pvt) Ltd':'Honda',
+    'TVS Motor Company Ltd':'TVS Motor','Bajaj Auto Ltd':'Bajaj',
+    'Royal Enfield (A Unit of Eicher Motors Ltd)':'Royal Enfield',
+    'Suzuki Motorcycle India Pvt Ltd':'Suzuki',
+    'India Yamaha Motor Pvt Ltd':'Yamaha',
+    'Ather Energy Pvt. Ltd':'Ather','Okinawa Autotech Pvt. Ltd':'Okinawa',
+    'India Kawasaki Motors Pvt Ltd':'Kawasaki',
+    'H-D Motor Company India Pvt Ltd':'Harley Davidson',
+    'Mahindra Two Wheelers Ltd':'M&M',
+    'Piaggio Vehicles Pvt Ltd':'Piaggio',
+    'UM Lohia Two Wheelers Pvt Ltd':'UM Lohia',
+    'Ashok Leyland Ltd':'Ashok Leyland','VECV- Eicher':'VECV',
+    'Volvo group':'Volvo Group','SML Isuzu Ltd':'SML Isuzu',
+    'TI Clean Mobility Pvt Ltd':'TI Clean Mobility',
+    'Pinnacle Mobility Solutions Pvt Ltd':'Pinnacle Mobility',
+    'Atul Auto Ltd':'Atul Auto',
+}
+
+def clean_oem(name):
+    if name in OEM_NAME_MAP: return OEM_NAME_MAP[name]
+    c = re.sub(r'\s*\(Pvt\)\s*', ' ', name)
+    c = re.sub(r'\s*(Pvt\.?|Private)\s*(Ltd\.?|Limited)\s*$', '', c)
+    c = re.sub(r'\s*(Ltd\.?|Limited)\s*$', '', c)
+    c = re.sub(r'\s+India\s*$', '', c)
+    return c.strip() or name
+
+def to_num(v):
+    if isinstance(v, (int, float)): return v
+    try: return float(v)
+    except: return 0
+
+# ── Excel → data.json converter ──────────────────────────────────────────────
+def convert_excel_to_json(excel_path):
+    """Parse Excel (auto-detect old or Kotak format) and write data.json"""
+    import openpyxl
+    print(f"Reading Excel: {excel_path}")
+    wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+    sheets = wb.sheetnames
+    print(f"  Sheets: {sheets}")
+
+    # Detect format
+    old_sheets = ['PVs - Raw data','2Ws - Raw data','3Ws - Raw data','M&HCVs - Raw data','LCVs - Raw data']
+    if any(s in sheets for s in old_sheets):
+        result = _parse_old_format(wb, old_sheets)
+    else:
+        result = _parse_kotak_format(wb)
+
+    wb.close()
+    if not result:
+        print("ERROR: No data parsed!")
+        sys.exit(1)
+    with open(DATA_FILE, 'w') as f:
+        json.dump(result, f)
+    print(f"  Wrote {DATA_FILE}: {len(result['rows'])} rows, {len(result['quarters'])} quarters "
+          f"({result['quarters'][0]} to {result['quarters'][-1]})")
+    return result
+
+def _parse_old_format(wb, old_sheets):
+    """Parse old format with explicit Zone/State/Manufacturer columns"""
+    SMAP = {'PVs - Raw data':'PV','2Ws - Raw data':'2W','3Ws - Raw data':'3W',
+            'M&HCVs - Raw data':'MHCV','LCVs - Raw data':'LCV'}
+    all_quarters, all_rows = None, []
+    for sname, seg in SMAP.items():
+        if sname not in wb.sheetnames: continue
+        ws = wb[sname]
+        rows = list(ws.iter_rows(min_row=1, values_only=True))
+        # Find header with Q1FY17 pattern
+        hdr_idx = -1
+        for ri, row in enumerate(rows[:5]):
+            for cell in row:
+                if cell and re.match(r'^Q\dFY\d{2}$', str(cell)):
+                    hdr_idx = ri; break
+            if hdr_idx >= 0: break
+        if hdr_idx < 0: continue
+        headers = rows[hdr_idx]
+        col_z = col_s = col_m = col_sub = -1; q_start = -1; quarters = []
+        for ci, h in enumerate(headers):
+            hs = str(h or '').strip(); hl = hs.lower()
+            if hl == 'zone': col_z = ci
+            elif hl == 'state': col_s = ci
+            elif hl in ('manufacturer','oem'): col_m = ci
+            elif hl in ('sub-segment','subsegment','sub_segment','sub segment'): col_sub = ci
+            elif re.match(r'^Q\dFY\d{2}$', hs):
+                if q_start < 0: q_start = ci
+                quarters.append(hs)
+        if col_z < 0 or col_s < 0 or col_m < 0 or q_start < 0: continue
+        if all_quarters is None: all_quarters = quarters
+        elif len(quarters) > len(all_quarters): all_quarters = quarters
+        for row in rows[hdr_idx+1:]:
+            zone = str(row[col_z] or '').strip()
+            state = str(row[col_s] or '').strip()
+            mfr = str(row[col_m] or '').strip()
+            subseg = str(row[col_sub] or '').strip() if col_sub >= 0 else 'All'
+            if not zone or not state or not mfr: continue
+            if zone.lower() == 'zone' or state.lower() == 'state': continue
+            vols = [to_num(row[q_start+q]) if q_start+q < len(row) else 0 for q in range(len(quarters))]
+            if any(v > 0 for v in vols):
+                all_rows.append([seg, subseg, zone, state, mfr] + vols)
+    if not all_rows: return None
+    return {'quarters': all_quarters,
+            'columns': ['segment','subsegment','zone','state','manufacturer'] + ['vol_'+q.lower() for q in all_quarters],
+            'rows': all_rows}
+
+def _parse_kotak_format(wb):
+    """Parse Kotak hierarchical format (Zone > State > OEM)"""
+    ZONE_NAMES = ['North Zone','East Zone','West Zone','South Zone']
+    ZONE_SHORT = {'North Zone':'North','East Zone':'East','West Zone':'West','South Zone':'South'}
+    # Determine which sheets to process
+    sheet_defs = []
+    has_c = 'Cars' in wb.sheetnames; has_u = 'UVs' in wb.sheetnames
+    has_m = 'Motorcycle' in wb.sheetnames; has_s = 'Scooters' in wb.sheetnames
+    if has_c: sheet_defs.append(('Cars','PV','Cars'))
+    if has_u: sheet_defs.append(('UVs','PV','UVs'))
+    if not has_c and not has_u and 'PVs' in wb.sheetnames: sheet_defs.append(('PVs','PV','All'))
+    if has_m: sheet_defs.append(('Motorcycle','2W','Motorcycle'))
+    if has_s: sheet_defs.append(('Scooters','2W','Scooters'))
+    if not has_m and not has_s and '2W' in wb.sheetnames: sheet_defs.append(('2W','2W','All'))
+    if 'MHCVs' in wb.sheetnames: sheet_defs.append(('MHCVs','MHCV','All'))
+    if 'LCVs' in wb.sheetnames: sheet_defs.append(('LCVs','LCV','All'))
+    if '3W' in wb.sheetnames: sheet_defs.append(('3W','3W','All'))
+
+    all_quarters, all_rows = None, []
+    for sname, seg, sub in sheet_defs:
+        ws = wb[sname]
+        rows = list(ws.iter_rows(min_row=1, values_only=True))
+        # Find header row with 1QFY16 pattern
+        hdr_idx = -1
+        for ri, row in enumerate(rows[:10]):
+            for cell in row:
+                if cell and re.match(r'^\dQFY\d{2}$', str(cell)):
+                    hdr_idx = ri; break
+            if hdr_idx >= 0: break
+        if hdr_idx < 0: continue
+        headers = rows[hdr_idx]
+        name_col = -1; q_start = -1; quarters = []
+        for ci, h in enumerate(headers):
+            hs = str(h or '').strip()
+            if re.match(r'^\dQFY\d{2}$', hs):
+                if q_start < 0: q_start = ci
+                quarters.append('Q' + hs[0] + hs[2:])  # 1QFY16 -> Q1FY16
+        # Detect name column by finding a zone name
+        for ri in range(hdr_idx+1, min(hdr_idx+15, len(rows))):
+            row = rows[ri]
+            if not row: continue
+            for ci in range(min(5, len(row))):
+                tv = str(row[ci] or '').strip()
+                if tv in ZONE_NAMES: name_col = ci; break
+            if name_col >= 0: break
+        if name_col < 0 or q_start < 0: continue
+        if all_quarters is None: all_quarters = quarters
+        elif len(quarters) > len(all_quarters): all_quarters = quarters
+        # Detect OEM list (first-repeat algorithm)
+        first_zone = -1
+        for ri in range(hdr_idx+1, len(rows)):
+            n = str(rows[ri][name_col] or '').strip()
+            if n in ZONE_NAMES: first_zone = ri; break
+        if first_zone < 0: continue
+        oem_list, seen = [], {}
+        for ri in range(first_zone+1, len(rows)):
+            n = str(rows[ri][name_col] or '').strip()
+            if not n or n == '0': continue
+            if n in seen: break
+            seen[n] = True; oem_list.append(n)
+        if len(oem_list) < 2: continue
+        oem_list.pop()  # last = first state
+        oem_set = set(oem_list)
+        # Parse data
+        cur_zone = ''; cur_state = ''; in_zone_block = False
+        for ri in range(first_zone, len(rows)):
+            row = rows[ri]; name = str(row[name_col] or '').strip()
+            if not name or name == '0': continue
+            nl = name.lower()
+            if nl in ('total','grand total','all india','india'): break
+            if name in ZONE_NAMES:
+                cur_zone = ZONE_SHORT.get(name, name); cur_state = ''; in_zone_block = True; continue
+            if name in oem_set:
+                if in_zone_block or not cur_zone or not cur_state: continue
+                vols = [to_num(row[q_start+q]) if q_start+q < len(row) else 0 for q in range(len(quarters))]
+                if any(v > 0 for v in vols):
+                    all_rows.append([seg, sub, cur_zone, cur_state, clean_oem(name)] + vols)
+                continue
+            cur_state = name; in_zone_block = False
+        print(f"  {sname}: {seg}/{sub} parsed")
+    if not all_rows: return None
+    return {'quarters': all_quarters,
+            'columns': ['segment','subsegment','zone','state','manufacturer'] + ['vol_'+q.lower() for q in all_quarters],
+            'rows': all_rows}
+
+# ── Main: optionally convert Excel, then build dashboard ─────────────────────
+if len(sys.argv) > 1:
+    convert_excel_to_json(sys.argv[1])
 
 with open(DATA_FILE, 'r') as f:
     data_json = f.read()
