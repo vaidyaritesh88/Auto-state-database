@@ -116,7 +116,10 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
 .chat-msg .msg-text ul,.chat-msg .msg-text ol{margin:4px 0 4px 18px;padding:0}
 .chat-code-result{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin:8px 0;font-family:monospace;font-size:12px;white-space:pre-wrap;color:#334155;max-height:200px;overflow-y:auto}
 .chat-code-error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
-.chat-chart-container{margin:10px 0;border-radius:8px;overflow:hidden;min-height:300px}
+.chat-chart-container{margin:10px 0;border-radius:8px;overflow:visible;min-height:340px;position:relative}
+.chat-chart-copy{position:absolute;top:4px;right:4px;z-index:10;background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;opacity:0;transition:opacity 0.15s;color:#374151}
+.chat-chart-container:hover .chat-chart-copy{opacity:0.8}
+.chat-chart-copy:hover{opacity:1!important;border-color:#2563eb;color:#2563eb}
 .chat-table-container{margin:8px 0;overflow-x:auto;max-height:400px;overflow-y:auto}
 .chat-table-container table{font-size:11px}
 .chat-input-area{display:flex;gap:8px;padding:12px 0;border-top:1px solid #e5e7eb;flex-shrink:0;align-items:flex-end}
@@ -1842,13 +1845,28 @@ function renderSegment(seg, container, msgId) {
     const chartId = 'chat-chart-' + msgId + '-' + Date.now() + '-' + Math.random().toString(36).substr(2,4);
     const plotDiv = document.createElement('div');
     plotDiv.id = chartId;
-    plotDiv.style.height = '340px';
+    plotDiv.style.height = '400px';
     chartDiv.appendChild(plotDiv);
+    // Copy chart button
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'chat-chart-copy';
+    copyBtn.textContent = '📷 Copy';
+    copyBtn.title = 'Copy chart as image';
+    copyBtn.onclick = function(e) {
+      e.stopPropagation();
+      Plotly.toImage(chartId, {format:'png', width:900, height:500}).then(function(url){
+        fetch(url).then(r=>r.blob()).then(function(blob){
+          try { navigator.clipboard.write([new ClipboardItem({'image/png':blob})]); copyBtn.textContent='✓ Copied'; setTimeout(function(){copyBtn.textContent='📷 Copy';},1500); }
+          catch(err){ var w=window.open(''); w.document.write('<img src="'+url+'">'); }
+        });
+      });
+    };
+    chartDiv.appendChild(copyBtn);
     container.appendChild(chartDiv);
     try {
       const spec = JSON.parse(seg.content);
       const traces = spec.data || spec.traces || [];
-      const layout = {...PLOTLY_LAYOUT, margin:{l:70,r:20,t:30,b:70}, ...(spec.layout||{})};
+      const layout = {...PLOTLY_LAYOUT, margin:{l:70,r:30,t:30,b:90}, legend:{orientation:'h',y:-0.18,x:0.5,xanchor:'center',font:{size:10}}, ...(spec.layout||{})};
       setTimeout(function(){ Plotly.newPlot(chartId, traces, layout, PLOTLY_CONFIG); }, 50);
     } catch(e) {
       plotDiv.textContent = 'Chart error: ' + e.message;
@@ -2064,31 +2082,105 @@ async function sendChatMessage(userText) {
 }
 
 function toggleSaveMessage(msgId) {
+  var newSaved = false;
   for (var i = 0; i < chatHistory.length; i++) {
     if (chatHistory[i].id === msgId) {
       chatHistory[i].saved = !chatHistory[i].saved;
+      newSaved = chatHistory[i].saved;
       break;
     }
   }
   saveChatHistory();
-  renderAllChatMessages();
+  // Update star in-place without re-rendering (avoids scroll jump)
+  var msgDiv = document.getElementById('msg-' + msgId);
+  if (msgDiv) {
+    var btn = msgDiv.querySelector('.msg-action-btn');
+    if (btn) {
+      btn.className = 'msg-action-btn' + (newSaved ? ' saved' : '');
+      btn.innerHTML = newSaved ? '&#11088;' : '&#9734;';
+      btn.title = newSaved ? 'Unsave' : 'Save';
+    }
+  }
 }
 
 function exportSavedMessages() {
   var saved = chatHistory.filter(function(m){ return m.saved; });
   if (saved.length === 0) { alert('No saved messages to export. Click the star icon on messages to save them.'); return; }
-  var md = '# Saved Chat Insights - ' + currentSegment + ' Segment\n';
-  md += 'Exported: ' + new Date().toLocaleString() + '\n\n';
-  saved.forEach(function(m, i) {
-    md += '## Insight ' + (i+1) + '\n';
-    md += m.content + '\n\n---\n\n';
+  // Collect chart image promises
+  var chartImages = {};
+  var chartPromises = [];
+  // Find all rendered chart divs from saved messages
+  saved.forEach(function(m) {
+    if (m.role !== 'assistant') return;
+    var msgDiv = document.getElementById('msg-' + m.id);
+    if (!msgDiv) return;
+    var charts = msgDiv.querySelectorAll('[id^="chat-chart-"]');
+    charts.forEach(function(el, ci) {
+      var pid = el.id;
+      if (el.querySelector('.js-plotly-plot')) {
+        chartPromises.push(
+          Plotly.toImage(pid, {format:'png', width:900, height:500}).then(function(dataUrl) {
+            if (!chartImages[m.id]) chartImages[m.id] = [];
+            chartImages[m.id].push(dataUrl);
+          }).catch(function(){ })
+        );
+      }
+    });
   });
-  var blob = new Blob([md], {type:'text/markdown'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'auto_insights_' + currentSegment + '_' + new Date().toISOString().slice(0,10) + '.md';
-  a.click();
-  URL.revokeObjectURL(a.href);
+  Promise.all(chartPromises).then(function() {
+    var parts = [];
+    parts.push('<html><head><meta charset="utf-8"><title>Auto Insights - ' + currentSegment + '</title>');
+    parts.push('<style>body{font-family:system-ui,-apple-system,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#1f2937;line-height:1.6}');
+    parts.push('h1{color:#1e40af;border-bottom:2px solid #2563eb;padding-bottom:8px}h2{color:#374151;margin-top:32px}');
+    parts.push('.q{background:#eff6ff;border-left:4px solid #2563eb;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0;font-weight:500}');
+    parts.push('table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px}th,td{border:1px solid #d1d5db;padding:6px 10px;text-align:left}th{background:#f1f5f9;font-weight:600}');
+    parts.push('img{max-width:100%;border-radius:8px;margin:12px 0;box-shadow:0 2px 8px rgba(0,0,0,0.1)}');
+    parts.push('hr{border:none;border-top:1px solid #e5e7eb;margin:24px 0}.meta{color:#6b7280;font-size:12px}</style></head><body>');
+    parts.push('<h1>Saved Chat Insights - ' + currentSegment + ' Segment</h1>');
+    parts.push('<p class="meta">Exported: ' + new Date().toLocaleString() + '</p>');
+    var insightNum = 0;
+    saved.forEach(function(m) {
+      if (m.role === 'user') {
+        parts.push('<div class="q">' + m.content.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>');
+      } else {
+        insightNum++;
+        parts.push('<h2>Insight ' + insightNum + '</h2>');
+        var segments = parseAssistantResponse(m.content);
+        var chartIdx = 0;
+        segments.forEach(function(seg) {
+          if (seg.type === 'text') {
+            parts.push(simpleMarkdown(seg.content.trim()));
+          } else if (seg.type === 'table') {
+            try {
+              var spec = JSON.parse(seg.content);
+              var html = '<table><thead><tr>' + (spec.headers||[]).map(function(h){return '<th>'+h+'</th>';}).join('') + '</tr></thead><tbody>';
+              (spec.rows||[]).forEach(function(row) {
+                html += '<tr>' + row.map(function(c){return '<td>'+c+'</td>';}).join('') + '</tr>';
+              });
+              html += '</tbody></table>';
+              parts.push(html);
+            } catch(e) {}
+          } else if (seg.type === 'chart') {
+            if (chartImages[m.id] && chartImages[m.id][chartIdx]) {
+              parts.push('<img src="' + chartImages[m.id][chartIdx] + '" alt="Chart">');
+            } else {
+              parts.push('<p><em>[Chart - view in dashboard]</em></p>');
+            }
+            chartIdx++;
+          }
+          // js segments are intentionally skipped
+        });
+        parts.push('<hr>');
+      }
+    });
+    parts.push('</body></html>');
+    var blob = new Blob([parts.join('\n')], {type:'text/html'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'auto_insights_' + currentSegment + '_' + new Date().toISOString().slice(0,10) + '.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
 }
 
 function clearChat() {
