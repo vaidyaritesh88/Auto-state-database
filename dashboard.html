@@ -1048,6 +1048,15 @@ function renderCompanyView() {
     }
     shareRows += '</tr>';
   }
+  // Overall national market share row
+  const natCoTS = tsVols(cvQ);
+  const natIndTS = tsVols(indQ);
+  shareRows += '<tr class="total-row" style="border-top:2px solid #94a3b8"><td><b>Overall (National)</b></td>';
+  for (let t = 0; t < tsLen2; t++) {
+    const natSh = natIndTS[t]>0 ? natCoTS[t]/natIndTS[t]*100 : 0;
+    shareRows += '<td class="align-right"><b>' + natSh.toFixed(1) + '%</b></td>';
+  }
+  shareRows += '</tr>';
   shareTSBody.innerHTML = shareRows;
 
   // Geo details table
