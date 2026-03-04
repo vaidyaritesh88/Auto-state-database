@@ -1568,109 +1568,273 @@ function showStatus(type, msg) {
   el.textContent = msg;
 }
 
+/* OEM name cleanup: map full legal names (Kotak format) to short display names */
+function cleanOemName(name) {
+  var M = {
+    'Maruti Suzuki India Ltd':'Maruti Suzuki','Hyundai Motor India Ltd':'Hyundai',
+    'Tata Motors Ltd':'Tata Motors','Mahindra & Mahindra Ltd':'M&M',
+    'Toyota Kirloskar Motor Pvt Ltd':'Toyota','Kia Motors':'Kia',
+    'Honda Cars India Ltd':'Honda','SkodaAuto India Pvt Ltd':'Skoda',
+    'Volkswagen India Pvt Ltd':'Volkswagen','Renault India Pvt Ltd':'Renault',
+    'Nissan Motor India Pvt Ltd':'Nissan','Ford India Pvt Ltd':'Ford',
+    'Fiat India Automobiles Pvt.Ltd':'Fiat India',
+    'General Motors India Pvt Ltd':'General Motors',
+    'Hindustan Motor Finance Corporation Ltd':'Hindustan Motor',
+    'Force Motors Ltd':'Force Motors','Isuzu Motors India Pvt Ltd':'Isuzu',
+    'PCA Motors Pvt Ltd':'PCA Motors','MG Motor':'MG Motor',
+    'Hero MotoCorp Ltd':'Hero',
+    'Honda Motorcycle & Scooter India (Pvt) Ltd':'Honda',
+    'TVS Motor Company Ltd':'TVS Motor','Bajaj Auto Ltd':'Bajaj',
+    'Royal Enfield (A Unit of Eicher Motors Ltd)':'Royal Enfield',
+    'Suzuki Motorcycle India Pvt Ltd':'Suzuki',
+    'India Yamaha Motor Pvt Ltd':'Yamaha',
+    'Ather Energy Pvt. Ltd':'Ather','Okinawa Autotech Pvt. Ltd':'Okinawa',
+    'India Kawasaki Motors Pvt Ltd':'Kawasaki',
+    'H-D Motor Company India Pvt Ltd':'Harley Davidson',
+    'Mahindra Two Wheelers Ltd':'M&M',
+    'Piaggio Vehicles Pvt Ltd':'Piaggio',
+    'UM Lohia Two Wheelers Pvt Ltd':'UM Lohia',
+    'Ashok Leyland Ltd':'Ashok Leyland','VECV- Eicher':'VECV',
+    'Volvo group':'Volvo Group','SML Isuzu Ltd':'SML Isuzu',
+    'TI Clean Mobility Pvt Ltd':'TI Clean Mobility',
+    'Pinnacle Mobility Solutions Pvt Ltd':'Pinnacle Mobility',
+    'Atul Auto Ltd':'Atul Auto'
+  };
+  if (M[name]) return M[name];
+  return name.replace(/\\s*\\(Pvt\\)\\s*/gi,' ').replace(/\\s*(Pvt\\.?|Private)\\s*(Ltd\\.?|Limited)\\s*$/i,'').replace(/\\s*(Ltd\\.?|Limited)\\s*$/i,'').replace(/\\s+India\\s*$/i,'').replace(/\\s+/g,' ').trim()||name;
+}
+
+/* Auto-detect Excel format and dispatch to appropriate parser */
 function parseExcel(arrayBuffer, fileName) {
   try {
     showStatus('info', 'Parsing Excel file...');
     var wb = XLSX.read(arrayBuffer, {type: 'array'});
-    var SHEET_MAP = {
-      'PVs - Raw data': 'PV',
-      '2Ws - Raw data': '2W',
-      '3Ws - Raw data': '3W',
-      'M&HCVs - Raw data': 'MHCV',
-      'LCVs - Raw data': 'LCV'
-    };
-    var allQuarters = null;
-    var allRows = [];
-    var sheetsFound = 0;
-    var sheetNames = Object.keys(SHEET_MAP);
-    for (var si = 0; si < sheetNames.length; si++) {
-      var sheetName = sheetNames[si];
-      var segment = SHEET_MAP[sheetName];
-      if (wb.SheetNames.indexOf(sheetName) < 0) {
-        showStatus('error', 'Missing sheet: "' + sheetName + '". Please check your Excel file has all 5 raw data sheets.');
-        return null;
-      }
-      sheetsFound++;
-      var ws = wb.Sheets[sheetName];
-      var jsonData = XLSX.utils.sheet_to_json(ws, {header:1, defval:0});
-      if (jsonData.length < 3) {
-        showStatus('error', 'Sheet "' + sheetName + '" has insufficient data.');
-        return null;
-      }
-      var headerRowIdx = -1;
-      for (var r = 0; r < Math.min(5, jsonData.length); r++) {
-        var row = jsonData[r];
-        for (var c = 0; c < row.length; c++) {
-          var val = String(row[c] || '');
-          if (/^Q\\dFY\\d{2}$/.test(val)) { headerRowIdx = r; break; }
-        }
-        if (headerRowIdx >= 0) break;
-      }
-      if (headerRowIdx < 0) {
-        showStatus('error', 'Cannot find quarter headers (like Q1FY17) in sheet "' + sheetName + '".');
-        return null;
-      }
-      var headers = jsonData[headerRowIdx];
-      var colZone=-1, colState=-1, colMfr=-1, colSubseg=-1;
-      var qStartCol = -1;
-      var quarters = [];
-      for (var c2 = 0; c2 < headers.length; c2++) {
-        var h = String(headers[c2] || '').trim();
-        var hLow = h.toLowerCase();
-        if (hLow === 'zone') colZone = c2;
-        else if (hLow === 'state') colState = c2;
-        else if (hLow === 'manufacturer' || hLow === 'oem') colMfr = c2;
-        else if (hLow === 'sub-segment' || hLow === 'subsegment' || hLow === 'sub_segment' || hLow === 'sub segment') colSubseg = c2;
-        else if (/^Q\\dFY\\d{2}$/.test(h)) {
-          if (qStartCol < 0) qStartCol = c2;
-          quarters.push(h);
-        }
-      }
-      if (colZone < 0 || colState < 0 || colMfr < 0 || qStartCol < 0) {
-        showStatus('error', 'Cannot find required columns (Zone, State, Manufacturer, Quarters) in sheet "' + sheetName + '".');
-        return null;
-      }
-      if (allQuarters === null) {
-        allQuarters = quarters;
-      } else if (quarters.length > allQuarters.length) {
-        allQuarters = quarters;
-      }
-      for (var r2 = headerRowIdx + 1; r2 < jsonData.length; r2++) {
-        var drow = jsonData[r2];
-        var zone = String(drow[colZone] || '').trim();
-        var state = String(drow[colState] || '').trim();
-        var mfr = String(drow[colMfr] || '').trim();
-        var subseg = colSubseg >= 0 ? String(drow[colSubseg] || '').trim() : 'All';
-        if (!zone || !state || !mfr) continue;
-        if (zone.toLowerCase() === 'zone' || state.toLowerCase() === 'state') continue;
-        var volumes = [];
-        var hasNonZero = false;
-        for (var q = 0; q < quarters.length; q++) {
-          var v = drow[qStartCol + q];
-          var num = typeof v === 'number' ? v : (parseFloat(v) || 0);
-          volumes.push(num);
-          if (num > 0) hasNonZero = true;
-        }
-        if (hasNonZero) {
-          allRows.push([segment, subseg, zone, state, mfr].concat(volumes));
-        }
-      }
-    }
-    if (allRows.length === 0) {
-      showStatus('error', 'No valid data rows found in the Excel file.');
-      return null;
-    }
-    var result = {
-      quarters: allQuarters,
-      columns: ['segment','subsegment','zone','state','manufacturer'].concat(allQuarters.map(function(q){return 'vol_'+q.toLowerCase();})),
-      rows: allRows
-    };
-    showStatus('success', 'Parsed ' + allRows.length.toLocaleString() + ' rows across ' + sheetsFound + ' segments, ' + allQuarters.length + ' quarters (' + allQuarters[0] + ' to ' + allQuarters[allQuarters.length-1] + '). Saving...');
-    return result;
+    /* Detect old format: has sheets like "PVs - Raw data" */
+    var OLD_SHEETS = ['PVs - Raw data','2Ws - Raw data','3Ws - Raw data','M&HCVs - Raw data','LCVs - Raw data'];
+    var isOldFormat = OLD_SHEETS.some(function(s){ return wb.SheetNames.indexOf(s) >= 0; });
+    if (isOldFormat) return parseOldFormat(wb);
+    /* Detect new Kotak format: has sheets like "Cars","UVs","Motorcycle" etc. */
+    var NEW_SHEETS = ['Cars','UVs','Motorcycle','Scooters','MHCVs','LCVs','3W','PVs','2W'];
+    var isNewFormat = NEW_SHEETS.some(function(s){ return wb.SheetNames.indexOf(s) >= 0; });
+    if (isNewFormat) return parseNewFormat(wb);
+    showStatus('error', 'Unrecognized Excel format. Expected sheets like "PVs - Raw data" (old format) or "Cars","UVs" etc. (Kotak format). Found: ' + wb.SheetNames.join(', '));
+    return null;
   } catch(e) {
     showStatus('error', 'Error parsing Excel: ' + e.message);
     return null;
   }
+}
+
+/* Parser for old format with explicit Zone/State/Manufacturer columns */
+function parseOldFormat(wb) {
+  var SHEET_MAP = {
+    'PVs - Raw data': 'PV', '2Ws - Raw data': '2W', '3Ws - Raw data': '3W',
+    'M&HCVs - Raw data': 'MHCV', 'LCVs - Raw data': 'LCV'
+  };
+  var allQuarters = null, allRows = [], sheetsFound = 0;
+  var sheetNames = Object.keys(SHEET_MAP);
+  for (var si = 0; si < sheetNames.length; si++) {
+    var sheetName = sheetNames[si];
+    var segment = SHEET_MAP[sheetName];
+    if (wb.SheetNames.indexOf(sheetName) < 0) {
+      showStatus('error', 'Missing sheet: "' + sheetName + '". Please check your Excel file has all 5 raw data sheets.');
+      return null;
+    }
+    sheetsFound++;
+    var ws = wb.Sheets[sheetName];
+    var jsonData = XLSX.utils.sheet_to_json(ws, {header:1, defval:0});
+    if (jsonData.length < 3) { showStatus('error', 'Sheet "' + sheetName + '" has insufficient data.'); return null; }
+    var headerRowIdx = -1;
+    for (var r = 0; r < Math.min(5, jsonData.length); r++) {
+      var row = jsonData[r];
+      for (var c = 0; c < row.length; c++) {
+        var val = String(row[c] || '');
+        if (/^Q\\dFY\\d{2}$/.test(val)) { headerRowIdx = r; break; }
+      }
+      if (headerRowIdx >= 0) break;
+    }
+    if (headerRowIdx < 0) { showStatus('error', 'Cannot find quarter headers in sheet "' + sheetName + '".'); return null; }
+    var headers = jsonData[headerRowIdx];
+    var colZone=-1, colState=-1, colMfr=-1, colSubseg=-1, qStartCol=-1, quarters=[];
+    for (var c2 = 0; c2 < headers.length; c2++) {
+      var h = String(headers[c2] || '').trim(), hLow = h.toLowerCase();
+      if (hLow === 'zone') colZone = c2;
+      else if (hLow === 'state') colState = c2;
+      else if (hLow === 'manufacturer' || hLow === 'oem') colMfr = c2;
+      else if (hLow === 'sub-segment' || hLow === 'subsegment' || hLow === 'sub_segment' || hLow === 'sub segment') colSubseg = c2;
+      else if (/^Q\\dFY\\d{2}$/.test(h)) { if (qStartCol < 0) qStartCol = c2; quarters.push(h); }
+    }
+    if (colZone < 0 || colState < 0 || colMfr < 0 || qStartCol < 0) {
+      showStatus('error', 'Cannot find required columns (Zone, State, Manufacturer, Quarters) in sheet "' + sheetName + '".'); return null;
+    }
+    if (allQuarters === null) allQuarters = quarters;
+    else if (quarters.length > allQuarters.length) allQuarters = quarters;
+    for (var r2 = headerRowIdx + 1; r2 < jsonData.length; r2++) {
+      var drow = jsonData[r2];
+      var zone = String(drow[colZone] || '').trim();
+      var state = String(drow[colState] || '').trim();
+      var mfr = String(drow[colMfr] || '').trim();
+      var subseg = colSubseg >= 0 ? String(drow[colSubseg] || '').trim() : 'All';
+      if (!zone || !state || !mfr) continue;
+      if (zone.toLowerCase() === 'zone' || state.toLowerCase() === 'state') continue;
+      var volumes = [], hasNonZero = false;
+      for (var q = 0; q < quarters.length; q++) {
+        var v = drow[qStartCol + q];
+        var num = typeof v === 'number' ? v : (parseFloat(v) || 0);
+        volumes.push(num); if (num > 0) hasNonZero = true;
+      }
+      if (hasNonZero) allRows.push([segment, subseg, zone, state, mfr].concat(volumes));
+    }
+  }
+  if (allRows.length === 0) { showStatus('error', 'No valid data rows found.'); return null; }
+  var result = {
+    quarters: allQuarters,
+    columns: ['segment','subsegment','zone','state','manufacturer'].concat(allQuarters.map(function(q){return 'vol_'+q.toLowerCase();})),
+    rows: allRows
+  };
+  showStatus('success', 'Parsed ' + allRows.length.toLocaleString() + ' rows across ' + sheetsFound + ' segments, ' + allQuarters.length + ' quarters (' + allQuarters[0] + ' to ' + allQuarters[allQuarters.length-1] + '). Saving...');
+  return result;
+}
+
+/* Parser for new Kotak hierarchical format (Zone > State > OEM structure) */
+function parseNewFormat(wb) {
+  var ZONE_NAMES = ['North Zone','East Zone','West Zone','South Zone'];
+  var ZONE_SHORT = {'North Zone':'North','East Zone':'East','West Zone':'West','South Zone':'South'};
+  /* Sheet mapping: subsegment sheets take priority over parent aggregate sheets */
+  var sheetDefs = [];
+  var hasCars = wb.SheetNames.indexOf('Cars') >= 0;
+  var hasUVs = wb.SheetNames.indexOf('UVs') >= 0;
+  var hasMotorcycle = wb.SheetNames.indexOf('Motorcycle') >= 0;
+  var hasScooters = wb.SheetNames.indexOf('Scooters') >= 0;
+  if (hasCars) sheetDefs.push({sheet:'Cars',seg:'PV',sub:'Cars'});
+  if (hasUVs) sheetDefs.push({sheet:'UVs',seg:'PV',sub:'UVs'});
+  if (!hasCars && !hasUVs && wb.SheetNames.indexOf('PVs') >= 0) sheetDefs.push({sheet:'PVs',seg:'PV',sub:'All'});
+  if (hasMotorcycle) sheetDefs.push({sheet:'Motorcycle',seg:'2W',sub:'Motorcycle'});
+  if (hasScooters) sheetDefs.push({sheet:'Scooters',seg:'2W',sub:'Scooters'});
+  if (!hasMotorcycle && !hasScooters && wb.SheetNames.indexOf('2W') >= 0) sheetDefs.push({sheet:'2W',seg:'2W',sub:'All'});
+  if (wb.SheetNames.indexOf('MHCVs') >= 0) sheetDefs.push({sheet:'MHCVs',seg:'MHCV',sub:'All'});
+  if (wb.SheetNames.indexOf('LCVs') >= 0) sheetDefs.push({sheet:'LCVs',seg:'LCV',sub:'All'});
+  if (wb.SheetNames.indexOf('3W') >= 0) sheetDefs.push({sheet:'3W',seg:'3W',sub:'All'});
+
+  var allQuarters = null, allRows = [], sheetsFound = 0;
+  for (var si = 0; si < sheetDefs.length; si++) {
+    var def = sheetDefs[si];
+    var ws = wb.Sheets[def.sheet];
+    if (!ws) continue;
+    sheetsFound++;
+    var jsonData = XLSX.utils.sheet_to_json(ws, {header:1, defval:0});
+    if (jsonData.length < 5) continue;
+
+    /* Find header row with quarter pattern like 1QFY16 */
+    var headerRowIdx = -1;
+    for (var r = 0; r < Math.min(10, jsonData.length); r++) {
+      var row = jsonData[r];
+      for (var c = 0; c < (row ? row.length : 0); c++) {
+        var val = String(row[c] || '');
+        if (/^\\dQFY\\d{2}$/.test(val)) { headerRowIdx = r; break; }
+      }
+      if (headerRowIdx >= 0) break;
+    }
+    if (headerRowIdx < 0) continue;
+
+    var headers = jsonData[headerRowIdx];
+    /* Find name column and quarter columns */
+    var nameCol = -1, qStartCol = -1, quarters = [];
+    for (var c2 = 0; c2 < headers.length; c2++) {
+      var h = String(headers[c2] || '').trim();
+      if (/^\\dQFY\\d{2}$/.test(h)) {
+        if (qStartCol < 0) qStartCol = c2;
+        quarters.push('Q' + h.charAt(0) + h.substring(2)); /* 1QFY16 -> Q1FY16 */
+      }
+    }
+    /* Detect name column by finding first zone name in rows after header */
+    for (var r3 = headerRowIdx + 1; r3 < Math.min(headerRowIdx + 15, jsonData.length); r3++) {
+      var testRow = jsonData[r3];
+      if (!testRow) continue;
+      for (var c3 = 0; c3 < Math.min(5, testRow.length); c3++) {
+        var tv = String(testRow[c3] || '').trim();
+        if (ZONE_NAMES.indexOf(tv) >= 0) { nameCol = c3; break; }
+      }
+      if (nameCol >= 0) break;
+    }
+    if (nameCol < 0 || qStartCol < 0 || quarters.length === 0) continue;
+
+    if (allQuarters === null) allQuarters = quarters;
+    else if (quarters.length > allQuarters.length) allQuarters = quarters;
+
+    /* Detect OEM list using first-repeat algorithm:
+       After first zone row, collect names. When a name repeats, everything
+       before the last name = OEMs, the last name = first state. */
+    var oemList = [], oemSet = {}, oemDetected = false;
+    var firstZoneRow = -1;
+    for (var r4 = headerRowIdx + 1; r4 < jsonData.length; r4++) {
+      var n4 = String(jsonData[r4][nameCol] || '').trim();
+      if (ZONE_NAMES.indexOf(n4) >= 0) { firstZoneRow = r4; break; }
+    }
+    if (firstZoneRow < 0) continue;
+
+    var seenNames = {};
+    for (var r5 = firstZoneRow + 1; r5 < jsonData.length; r5++) {
+      var n5 = String(jsonData[r5][nameCol] || '').trim();
+      if (!n5 || n5 === '0') continue;
+      if (seenNames[n5]) { oemDetected = true; break; }
+      seenNames[n5] = true;
+      oemList.push(n5);
+    }
+    if (!oemDetected || oemList.length < 2) continue;
+
+    /* Last name before repeat = first state; rest are OEMs */
+    oemList.pop();
+    for (var oi = 0; oi < oemList.length; oi++) oemSet[oemList[oi]] = true;
+
+    /* Parse all data rows with state machine */
+    var currentZone = '', currentState = '', inZoneBlock = false;
+    for (var r6 = firstZoneRow; r6 < jsonData.length; r6++) {
+      var drow = jsonData[r6];
+      var name6 = String(drow[nameCol] || '').trim();
+      if (!name6 || name6 === '0') continue;
+
+      /* Stop at Total / Grand Total / All India */
+      var nameLow = name6.toLowerCase();
+      if (nameLow === 'total' || nameLow === 'grand total' || nameLow === 'all india' || nameLow === 'india') break;
+
+      /* Zone row */
+      if (ZONE_NAMES.indexOf(name6) >= 0) {
+        currentZone = ZONE_SHORT[name6] || name6;
+        currentState = '';
+        inZoneBlock = true;
+        continue;
+      }
+
+      /* OEM row */
+      if (oemSet[name6]) {
+        if (inZoneBlock) continue; /* skip zone-level OEM aggregates */
+        if (!currentZone || !currentState) continue;
+        var volumes = [], hasNonZero = false;
+        for (var q = 0; q < quarters.length; q++) {
+          var v = drow[qStartCol + q];
+          var num = typeof v === 'number' ? v : (parseFloat(v) || 0);
+          volumes.push(num); if (num > 0) hasNonZero = true;
+        }
+        if (hasNonZero) {
+          allRows.push([def.seg, def.sub, currentZone, currentState, cleanOemName(name6)].concat(volumes));
+        }
+        continue;
+      }
+
+      /* State name row */
+      currentState = name6;
+      inZoneBlock = false;
+    }
+  }
+  if (allRows.length === 0) { showStatus('error', 'No valid data rows found in the Kotak file.'); return null; }
+  var result = {
+    quarters: allQuarters,
+    columns: ['segment','subsegment','zone','state','manufacturer'].concat(allQuarters.map(function(q){return 'vol_'+q.toLowerCase();})),
+    rows: allRows
+  };
+  showStatus('success', 'Parsed ' + allRows.length.toLocaleString() + ' rows across ' + sheetsFound + ' segments (' + sheetDefs.map(function(d){return d.sheet;}).join(', ') + '), ' + allQuarters.length + ' quarters (' + allQuarters[0] + ' to ' + allQuarters[allQuarters.length-1] + '). Saving...');
+  return result;
 }
 
 function handleFileUpload(file) {
