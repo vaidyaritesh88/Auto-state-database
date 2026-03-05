@@ -491,6 +491,11 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
     <div class="chart-card"><div class="chart-title">Market Share Trends - Top Companies</div><div id="chart-st-share" style="height:300px"></div></div>
     <div class="chart-card"><div class="chart-title">YoY Volume Growth Trend (%)</div><div id="chart-st-yoy" style="height:300px"></div></div>
   </div>
+  <div id="subseg-mix-state" style="display:none">
+    <div class="chart-row"><div class="chart-card" style="flex:1"><div class="chart-title" id="title-st-subseg-mix">Subsegment Mix (%)</div><div id="chart-st-subseg-mix" style="height:300px"></div></div></div>
+    <div class="table-wrap"><div class="chart-title" id="title-st-subseg-vol">Subsegment Volumes</div><table id="table-st-subseg-vol"><thead></thead><tbody></tbody></table></div>
+    <div class="table-wrap"><div class="chart-title" id="title-st-subseg-yoy">Subsegment YoY Growth (%)</div><table id="table-st-subseg-yoy"><thead></thead><tbody></tbody></table></div>
+  </div>
   <div class="table-wrap">
     <div class="chart-title">Company Rankings in State</div>
     <table id="table-st-companies"><thead></thead><tbody></tbody></table>
@@ -1409,6 +1414,81 @@ function renderStateView() {
     yoyTraces.push({x:tsDates(),y:yoy,type:'scatter',mode:'lines',name:c,line:{color:getColor(c,ci+2),width:1.5},connectgaps:false,hovertemplate:c+': %{y:.1f}%<extra></extra>'});
   });
   plotYoYGrowth('chart-st-yoy',yoyTraces);
+
+  // Subsegment mix section (PV: Cars/UVs, 2W: Motorcycle/Scooters)
+  var actualSubsegs = segSubsegs.filter(function(s){return s!=='All';});
+  var mixEl = document.getElementById('subseg-mix-state');
+  if (actualSubsegs.length >= 2 && sub === 'All') {
+    mixEl.style.display = 'block';
+    var segName = currentSegment;
+    var subColors = ['#2563eb','#f59e0b','#10b981','#ef4444','#8b5cf6'];
+    var subVols = actualSubsegs.map(function(s){return tsVols(getStateIndustryVols(st,s));});
+    var mixTotals = subVols[0].map(function(_,t){return subVols.reduce(function(sum,sv){return sum+sv[t];},0);});
+    var subPcts = subVols.map(function(sv){return sv.map(function(v,t){return mixTotals[t]>0?v/mixTotals[t]*100:0;});});
+    var dates = tsDates(), tsLen = dates.length;
+
+    /* 100% stacked bar chart */
+    document.getElementById('title-st-subseg-mix').textContent = segName + ' Subsegment Mix (%)';
+    var mixTraces = actualSubsegs.map(function(s,i){return {
+      x:dates, y:subPcts[i], customdata:subVols[i], type:'bar', name:s,
+      marker:{color:subColors[i%subColors.length]},
+      hovertemplate:s+': %{y:.1f}%<br>Volume: %{customdata:,.0f}<extra></extra>'
+    };});
+    Plotly.newPlot('chart-st-subseg-mix',mixTraces,{
+      ...PLOTLY_LAYOUT, barmode:'stack',
+      margin:{l:60,r:25,t:10,b:75},
+      yaxis:{...PLOTLY_LAYOUT.yaxis, title:{text:'% Mix',standoff:10}, range:[0,100.5]},
+      legend:{orientation:'h',y:-0.22,x:0.5,xanchor:'center',font:{size:10}}
+    },PLOTLY_CONFIG);
+    addChartCopyBtn('chart-st-subseg-mix');
+
+    /* Absolute sales table */
+    document.getElementById('title-st-subseg-vol').textContent = segName + ' Subsegment Volumes';
+    var volHead = '<tr><th>Subsegment</th>' + dates.map(function(d){return '<th class="align-right">'+d+'</th>';}).join('') + '</tr>';
+    var volBody = '';
+    actualSubsegs.forEach(function(s,i){
+      volBody += '<tr><td><b>'+s+'</b></td>';
+      for(var t=0;t<tsLen;t++) volBody += '<td class="align-right">'+fmt(subVols[i][t])+'</td>';
+      volBody += '</tr>';
+    });
+    volBody += '<tr class="total-row"><td><b>Total '+segName+'</b></td>';
+    for(var t=0;t<tsLen;t++) volBody += '<td class="align-right"><b>'+fmt(mixTotals[t])+'</b></td>';
+    volBody += '</tr>';
+    actualSubsegs.forEach(function(s,i){
+      volBody += '<tr style="color:#6b7280;font-size:12px"><td><i>'+s+' %</i></td>';
+      for(var t=0;t<tsLen;t++) volBody += '<td class="align-right"><i>'+subPcts[i][t].toFixed(1)+'%</i></td>';
+      volBody += '</tr>';
+    });
+    document.querySelector('#table-st-subseg-vol thead').innerHTML = volHead;
+    document.querySelector('#table-st-subseg-vol tbody').innerHTML = volBody;
+
+    /* YoY growth table */
+    document.getElementById('title-st-subseg-yoy').textContent = segName + ' Subsegment YoY Growth (%)';
+    var yoyHead2 = '<tr><th>Subsegment</th>' + dates.map(function(d){return '<th class="align-right">'+d+'</th>';}).join('') + '</tr>';
+    var yoyBody2 = '';
+    actualSubsegs.forEach(function(s){
+      var yoy2 = yoyGrowthSeries(getStateIndustryVols(st,s));
+      yoyBody2 += '<tr><td><b>'+s+'</b></td>';
+      for(var t=0;t<tsLen;t++){
+        var g=yoy2[t];
+        if(g===null||g===undefined) yoyBody2+='<td class="align-right">-</td>';
+        else yoyBody2+='<td class="align-right '+(g>=0?'positive':'negative')+'">'+(g>=0?'+':'')+g.toFixed(1)+'%</td>';
+      }
+      yoyBody2 += '</tr>';
+    });
+    var overallYoY = yoyGrowthSeries(stIndQ);
+    yoyBody2 += '<tr class="total-row"><td><b>Overall '+segName+'</b></td>';
+    for(var t=0;t<tsLen;t++){
+      var g2=overallYoY[t];
+      if(g2===null||g2===undefined) yoyBody2+='<td class="align-right">-</td>';
+      else yoyBody2+='<td class="align-right '+(g2>=0?'positive':'negative')+'"><b>'+(g2>=0?'+':'')+g2.toFixed(1)+'%</b></td>';
+    }
+    yoyBody2 += '</tr>';
+    document.querySelector('#table-st-subseg-yoy thead').innerHTML = yoyHead2;
+    document.querySelector('#table-st-subseg-yoy tbody').innerHTML = yoyBody2;
+  } else {
+    mixEl.style.display = 'none';
+  }
 
   // Company table
   const yoyQs = yoyPeriodQIdxs();
