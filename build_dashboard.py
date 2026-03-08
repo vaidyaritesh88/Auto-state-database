@@ -2655,72 +2655,159 @@ function buildDataSummary() {
   var lines = [];
   lines.push('Current segment: ' + currentSegment);
   lines.push('Subsegments: ' + segSubsegs.join(', '));
-  lines.push('Companies (' + segCompanies.length + '): ' + segCompanies.slice(0,20).join(', ') + (segCompanies.length>20?'...':''));
+  lines.push('Companies (' + segCompanies.length + '): ' + segCompanies.join(', '));
   lines.push('States (' + segStates.length + '): ' + segStates.join(', '));
   lines.push('Zones (' + segZones.length + '): ' + segZones.join(', '));
-  // Latest quarter industry total
+  lines.push('Zone-State mapping: ' + segZones.map(function(z){ return z + ': ' + (zoneStateMap[z]||[]).join(', '); }).join(' | '));
+  return lines.join('\\n');
+}
+
+function buildDataSnapshot() {
+  var lines = [];
   var indQ = getIndustryVols('All');
-  lines.push('\\nIndustry total volume by recent quarters:');
-  for (var qi = Math.max(0,NQ-4); qi < NQ; qi++) {
-    lines.push('  ' + QLABELS[qi] + ': ' + indQ[qi].toLocaleString());
-  }
-  // Last 3 FY totals
   var annInd = annualVols(indQ);
-  lines.push('\\nIndustry annual volume (last 4 FYs):');
-  for (var fi = Math.max(0,NFY-4); fi < NFY; fi++) {
-    var qtrs = FY_Q_IDXS[FYS[fi]].length;
-    lines.push('  ' + FYS[fi] + (qtrs<4?' (YTD, '+qtrs+'Q)':'') + ': ' + annInd[fi].toLocaleString());
+
+  // ── SECTION 1: Annual volumes for ALL companies ──
+  lines.push('=== ANNUAL COMPANY VOLUMES (All subsegments combined) ===');
+  var fyHeaders = FYS.map(function(fy){
+    var qtrs = FY_Q_IDXS[fy].length;
+    return qtrs < 4 ? fy + '(' + qtrs + 'Q)' : fy;
+  });
+  lines.push('Company|' + fyHeaders.join('|'));
+  lines.push('INDUSTRY TOTAL|' + annInd.map(function(v){return Math.round(v);}).join('|'));
+  var compAnn = segCompanies.map(function(c){
+    var cv = annualVols(getCompanyVols(c,'All'));
+    var latestVol = cv[NFY-1];
+    return {c:c, data:cv, latest:latestVol};
+  }).sort(function(a,b){return b.latest-a.latest;});
+  compAnn.forEach(function(d){
+    lines.push(d.c + '|' + d.data.map(function(v){return Math.round(v);}).join('|'));
+  });
+
+  // ── SECTION 2: Subsegment annual volumes (if applicable) ──
+  var actualSubsegs = segSubsegs.filter(function(s){return s!=='All';});
+  if (actualSubsegs.length >= 2) {
+    lines.push('');
+    lines.push('=== SUBSEGMENT ANNUAL VOLUMES ===');
+    lines.push('Subsegment|' + fyHeaders.join('|'));
+    actualSubsegs.forEach(function(sub){
+      var sv = annualVols(getIndustryVols(sub));
+      lines.push(sub + '|' + sv.map(function(v){return Math.round(v);}).join('|'));
+    });
+    // Top companies per subsegment for latest FY
+    actualSubsegs.forEach(function(sub){
+      lines.push('');
+      lines.push('--- Top companies in ' + sub + ' (latest FY) ---');
+      var subInd = annualVols(getIndustryVols(sub));
+      var latestSubInd = subInd[NFY-1];
+      var subComps = segCompanies.map(function(c){
+        var cv = annualVols(getCompanyVols(c,sub));
+        return {c:c, vol:cv[NFY-1]};
+      }).filter(function(d){return d.vol>0;}).sort(function(a,b){return b.vol-a.vol;}).slice(0,15);
+      subComps.forEach(function(d,i){
+        lines.push((i+1)+'. ' + d.c + ': ' + Math.round(d.vol).toLocaleString() + ' (' + (latestSubInd>0?(d.vol/latestSubInd*100).toFixed(1):'0') + '% share)');
+      });
+    });
   }
-  // Top 10 companies latest quarter
-  lines.push('\\nTop 10 companies by volume in ' + QLABELS[NQ-1] + ':');
-  var compVols = segCompanies.map(function(c){ return {c:c, v:getCompanyVols(c,'All')[NQ-1]}; }).sort(function(a,b){return b.v-a.v;}).slice(0,10);
-  var latestInd = indQ[NQ-1];
-  compVols.forEach(function(d,i){ lines.push('  '+(i+1)+'. '+d.c+': '+d.v.toLocaleString()+' ('+((latestInd>0?d.v/latestInd*100:0).toFixed(1))+'% share)'); });
+
+  // ── SECTION 3: Quarterly data for recent quarters (all companies) ──
+  var recentN = Math.min(8, NQ);
+  lines.push('');
+  lines.push('=== QUARTERLY VOLUMES (last ' + recentN + ' quarters) ===');
+  var qHeaders = [];
+  for (var qi = NQ - recentN; qi < NQ; qi++) qHeaders.push(QLABELS[qi]);
+  lines.push('Company|' + qHeaders.join('|'));
+  lines.push('INDUSTRY TOTAL|' + qHeaders.map(function(_,i){ return Math.round(indQ[NQ-recentN+i]); }).join('|'));
+  compAnn.forEach(function(d){
+    var cv = getCompanyVols(d.c,'All');
+    var vals = [];
+    for (var qi = NQ - recentN; qi < NQ; qi++) vals.push(Math.round(cv[qi]));
+    if (vals.some(function(v){return v>0;})) {
+      lines.push(d.c + '|' + vals.join('|'));
+    }
+  });
+
+  // ── SECTION 4: State-level industry volumes (annual, last 3 FYs) ──
+  var recentFYN = Math.min(3, NFY);
+  var recentFYHeaders = fyHeaders.slice(NFY - recentFYN);
+  lines.push('');
+  lines.push('=== STATE INDUSTRY VOLUMES (last ' + recentFYN + ' FYs) ===');
+  lines.push('State|Zone|' + recentFYHeaders.join('|'));
+  var stateAnn = segStates.map(function(st){
+    var sv = annualVols(getStateIndustryVols(st,'All'));
+    var zone = '';
+    var rows = filterRows(null, st, 'All');
+    if (rows.length > 0) zone = ROWS[rows[0]][2];
+    return {st:st, zone:zone, data:sv.slice(NFY-recentFYN), latest:sv[NFY-1]};
+  }).sort(function(a,b){return b.latest-a.latest;});
+  stateAnn.forEach(function(d){
+    lines.push(d.st + '|' + d.zone + '|' + d.data.map(function(v){return Math.round(v);}).join('|'));
+  });
+
+  // ── SECTION 5: Zone-level industry volumes (annual) ──
+  lines.push('');
+  lines.push('=== ZONE INDUSTRY VOLUMES (last ' + recentFYN + ' FYs) ===');
+  lines.push('Zone|' + recentFYHeaders.join('|'));
+  segZones.forEach(function(z){
+    var zv = annualVols(getZoneIndustryVols(z,'All'));
+    lines.push(z + '|' + zv.slice(NFY-recentFYN).map(function(v){return Math.round(v);}).join('|'));
+  });
+
+  // ── SECTION 6: Market share matrix - top companies × top states (latest FY) ──
+  var topComps = compAnn.slice(0,12).map(function(d){return d.c;});
+  var topStates = stateAnn.slice(0,15).map(function(d){return d.st;});
+  lines.push('');
+  lines.push('=== COMPANY MARKET SHARE BY STATE (%, latest FY: ' + FYS[NFY-1] + ') ===');
+  lines.push('State|' + topComps.join('|'));
+  topStates.forEach(function(st){
+    var stInd = annualVols(getStateIndustryVols(st,'All'))[NFY-1];
+    var shares = topComps.map(function(c){
+      var cv = annualVols(getStateCompanyVols(st,c,'All'))[NFY-1];
+      return stInd > 0 ? (cv/stInd*100).toFixed(1) : '0';
+    });
+    lines.push(st + '|' + shares.join('|'));
+  });
+
   return lines.join('\\n');
 }
 
 function buildSystemPrompt() {
   return 'You are an expert analyst for Indian auto industry state-wise primary sales data. You help answer questions, create charts, and do calculations.\\n\\n' +
-  'DATA STRUCTURE:\\n' +
-  '- ROWS: array of ' + ROWS.length + ' rows. Each row: [segment, subsegment, zone, state, manufacturer, vol_Q1FY17, vol_Q2FY17, ..., vol_Q2FY26]\\n' +
-  '- Volumes start at index 5. Quarter index 0 = Q1FY17, index ' + (NQ-1) + ' = ' + Q[NQ-1] + '\\n' +
-  '- Q: array of quarter labels ' + JSON.stringify(Q.slice(0,4)) + '...' + JSON.stringify(Q.slice(-2)) + ' (' + NQ + ' quarters)\\n' +
-  '- QLABELS: display labels like "1QFY17","2QFY17",...\\n' +
+  'IMPORTANT: You have FULL DATA TABLES below. Read the actual numbers from these tables to answer questions directly. Only use ```js blocks for complex calculations not answerable from the tables.\\n\\n' +
+  'DATA OVERVIEW:\\n' +
+  buildDataSummary() + '\\n\\n' +
+  'DATA REFERENCE:\\n' +
+  '- Indian Fiscal Year: FY17 = Apr 2016 to Mar 2017. Quarters: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar\\n' +
   '- FYS: ' + JSON.stringify(FYS) + '\\n' +
-  '- FY_Q_IDXS: maps FY to quarter indices, e.g. FY17:[0,1,2,3], FY25:[32,33,34,35]\\n' +
-  '- FY26 is PARTIAL (' + (FY_Q_IDXS[FYS[NFY-1]]||[]).length + ' quarters only)\\n' +
-  '- Segments: ' + JSON.stringify([...new Set(ROWS.map(r=>r[0]))]) + '\\n\\n' +
-  'CURRENT CONTEXT:\\n' + buildDataSummary() + '\\n\\n' +
-  'AVAILABLE JS HELPER FUNCTIONS (all global, use in ```js blocks):\\n' +
-  '- filterRows(company, state, subseg, zone) -> array of row indices (pass null to skip filter, "All" for subseg means all)\\n' +
-  '- sumVolumes(rowIdxs) -> array of ' + NQ + ' quarterly volumes\\n' +
-  '- getIndustryVols(sub) -> quarterly industry volumes for subsegment\\n' +
+  '- Quarter labels: ' + JSON.stringify(QLABELS.slice(0,4)) + '...' + JSON.stringify(QLABELS.slice(-2)) + ' (' + NQ + ' quarters total)\\n' +
+  '- ' + FYS[NFY-1] + ' is PARTIAL (' + (FY_Q_IDXS[FYS[NFY-1]]||[]).length + ' quarters only)\\n' +
+  '- Data is pipe-delimited. Values are unit volumes (not in lakhs/crores).\\n\\n' +
+  '=== FULL DATA (read numbers directly from here) ===\\n' +
+  buildDataSnapshot() + '\\n\\n' +
+  'JS HELPER FUNCTIONS (for complex queries only, use in ```js blocks):\\n' +
+  '- getIndustryVols(sub) -> quarterly array (' + NQ + ' elements). sub="All" for combined.\\n' +
   '- getCompanyVols(co, sub) -> quarterly company volumes\\n' +
-  '- getStateIndustryVols(state, sub) -> quarterly state industry volumes\\n' +
-  '- getStateCompanyVols(state, company, sub) -> quarterly state+company volumes\\n' +
-  '- getZoneIndustryVols(zone, sub) -> quarterly zone industry volumes\\n' +
-  '- getZoneCompanyVols(zone, company, sub) -> quarterly zone+company volumes\\n' +
-  '- computeShare(companyVols, industryVols) -> array of percentages\\n' +
-  '- annualVols(qVols) -> sums quarterly array to annual FY array (length ' + NFY + ')\\n' +
-  '- fmt(n) -> formatted string with Cr/L/K suffix\\n' +
-  '- NQ=' + NQ + ', NFY=' + NFY + '\\n' +
-  '- QLABELS: array of display labels for quarters\\n' +
-  '- FYLABELS: array of FY labels\\n' +
-  '- PALETTE: array of 15 colors for charts\\n' +
-  '- COMPANY_COLORS: map of company name to hex color\\n\\n' +
+  '- getStateIndustryVols(state, sub), getStateCompanyVols(state, co, sub)\\n' +
+  '- getZoneIndustryVols(zone, sub), getZoneCompanyVols(zone, co, sub)\\n' +
+  '- filterRows(company, state, subseg, zone) -> row indices (null=skip filter)\\n' +
+  '- sumVolumes(rowIdxs) -> quarterly array. annualVols(qVols) -> annual FY array\\n' +
+  '- computeShare(coVols, indVols) -> percentage array\\n' +
+  '- fmt(n) -> formatted string with K/M suffix\\n' +
+  '- NQ=' + NQ + ', NFY=' + NFY + ', QLABELS, FYLABELS, PALETTE, COMPANY_COLORS\\n\\n' +
   'OUTPUT FORMATS:\\n' +
-  '1. Normal text: just write your analysis. Use **bold** and *italic* for emphasis.\\n' +
-  '2. JavaScript computation: wrap in ```js block. The LAST EXPRESSION is captured and displayed. Use this to compute values from the raw data.\\n' +
-  '3. Plotly chart: wrap in ```chart block with JSON: {"data": [array of Plotly trace objects], "layout": {optional layout overrides}}. Example trace: {"x":["Q1","Q2"],"y":[100,200],"type":"scatter","mode":"lines+markers","name":"Series1"}\\n' +
-  '4. Table: wrap in ```table block with JSON: {"headers": ["Col1","Col2",...], "rows": [[val1,val2,...], ...]}\\n\\n' +
+  '1. Text analysis: write directly using **bold** and *italic*. Cite numbers from the data tables.\\n' +
+  '2. ```js block: JavaScript executed in browser. Last expression shown as result. Use try-catch.\\n' +
+  '3. ```chart block: Plotly JSON {"data":[traces],"layout":{}}. Example trace: {"x":["FY23","FY24"],"y":[100,200],"type":"bar","name":"Sales"}\\n' +
+  '4. ```table block: {"headers":["A","B"],"rows":[[1,2],[3,4]]}\\n\\n' +
   'RULES:\\n' +
-  '- Always use try-catch in js blocks for safety\\n' +
-  '- For "All" subsegments, pass "All" as the sub parameter\\n' +
-  '- Quarter index mapping: Q1FY17=0, Q2FY17=1, ..., Q1FY26=36, Q2FY26=37\\n' +
-  '- In js blocks, the last expression value is shown to the user. Assign your final result to a variable or just write the expression last.\\n' +
-  '- For charts, use COMPANY_COLORS[companyName] or PALETTE[i] for colors\\n' +
-  '- Keep responses concise and data-driven\\n' +
-  '- When asked about trends, prefer charts. When asked for specific numbers, prefer tables.';
+  '- PREFER reading numbers directly from the data tables above over writing JS code\\n' +
+  '- Only use ```js blocks when the question requires computation not directly available in tables (e.g., CAGR, custom aggregations)\\n' +
+  '- When computing market share: share = company_vol / industry_vol * 100\\n' +
+  '- For YoY growth: (current - previous) / previous * 100\\n' +
+  '- For charts, use COMPANY_COLORS[name] or PALETTE[i] for consistent colors\\n' +
+  '- Keep responses concise and data-driven. Always cite specific numbers.\\n' +
+  '- When asked about trends, prefer charts. When asked for numbers, prefer tables.\\n' +
+  '- For FYTD comparisons with partial years, compare same quarters only.';
 }
 
 function addChatMessage(role, content, saved) {
