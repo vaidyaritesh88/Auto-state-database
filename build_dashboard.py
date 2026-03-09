@@ -697,7 +697,9 @@ let chatHistory = []; // [{id, role, content, timestamp, saved, renderedHTML}]
 var CHAT_MODELS = {
   'claude-sonnet': { provider:'anthropic', name:'Claude Sonnet', model:'claude-sonnet-4-20250514', keyPrefix:'sk-ant-', keyPlaceholder:'Enter Anthropic API key (sk-ant-...)', keyLink:'https://console.anthropic.com/settings/keys', keyLinkLabel:'console.anthropic.com' },
   'gemini-flash': { provider:'google', name:'Gemini 2.5 Flash', model:'gemini-2.5-flash', keyPrefix:'AIza', keyPlaceholder:'Enter Google AI API key (AIza...)', keyLink:'https://aistudio.google.com/apikey', keyLinkLabel:'aistudio.google.com' },
-  'gemini-pro': { provider:'google', name:'Gemini 2.5 Pro', model:'gemini-2.5-pro', keyPrefix:'AIza', keyPlaceholder:'Enter Google AI API key (AIza...)', keyLink:'https://aistudio.google.com/apikey', keyLinkLabel:'aistudio.google.com' }
+  'gemini-pro': { provider:'google', name:'Gemini 2.5 Pro', model:'gemini-2.5-pro', keyPrefix:'AIza', keyPlaceholder:'Enter Google AI API key (AIza...)', keyLink:'https://aistudio.google.com/apikey', keyLinkLabel:'aistudio.google.com' },
+  'gemini3-flash': { provider:'google', name:'Gemini 3 Flash', model:'gemini-3-flash-preview', keyPrefix:'AIza', keyPlaceholder:'Enter Google AI API key (AIza...)', keyLink:'https://aistudio.google.com/apikey', keyLinkLabel:'aistudio.google.com' },
+  'gemini3-pro': { provider:'google', name:'Gemini 3.1 Pro', model:'gemini-3.1-pro-preview', keyPrefix:'AIza', keyPlaceholder:'Enter Google AI API key (AIza...)', keyLink:'https://aistudio.google.com/apikey', keyLinkLabel:'aistudio.google.com' }
 };
 var selectedModel = 'claude-sonnet';
 try { selectedModel = localStorage.getItem('janchor_selected_model') || 'claude-sonnet'; } catch(e) {}
