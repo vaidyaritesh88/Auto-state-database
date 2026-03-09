@@ -2712,7 +2712,14 @@ function renderSegment(seg, container, msgId) {
 
 function executeChatCode(code) {
   try {
-    var result = eval(code);
+    var result;
+    try {
+      result = (new Function(code))();
+    } catch(e1) {
+      if (e1 instanceof SyntaxError) {
+        result = eval(code);
+      } else { throw e1; }
+    }
     return {success:true, result:result};
   } catch(e) {
     return {success:false, error:e.message};
