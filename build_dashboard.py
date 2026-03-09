@@ -2871,7 +2871,7 @@ function buildApiRequest(systemPrompt, messages) {
       },
       body: {
         model: cfg.model,
-        max_tokens: 4096,
+        max_tokens: 16384,
         system: [{type:'text', text: systemPrompt, cache_control:{type:'ephemeral'}}],
         messages: messages
       }
@@ -2886,7 +2886,7 @@ function buildApiRequest(systemPrompt, messages) {
       body: {
         systemInstruction: { parts: [{text: systemPrompt}] },
         contents: contents,
-        generationConfig: { maxOutputTokens: 8192 }
+        generationConfig: { maxOutputTokens: 65536 }
       }
     };
   }
