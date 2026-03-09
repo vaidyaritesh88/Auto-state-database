@@ -2630,16 +2630,27 @@ function simpleMarkdown(text) {
 
 function parseAssistantResponse(text) {
   const segments = [];
-  const regex = /```(js|javascript|chart|table)\\n([\\s\\S]*?)```/g;
+  const regex = /```(js|javascript|json|chart|table)\\n([\\s\\S]*?)```/g;
   let last = 0, match;
   while ((match = regex.exec(text)) !== null) {
     if (match.index > last) segments.push({type:'text', content:text.slice(last, match.index)});
     let type = match[1];
     if (type === 'javascript') type = 'js';
+    if (type === 'json') {
+      try { var obj = JSON.parse(match[2]); type = (obj.headers || obj.render === 'table') ? 'table' : (obj.data || obj.traces) ? 'chart' : 'text'; } catch(e) { type = 'text'; }
+    }
     segments.push({type, content:match[2]});
     last = regex.lastIndex;
   }
   if (last < text.length) segments.push({type:'text', content:text.slice(last)});
+  // Detect bare JSON table objects not in code fences
+  for (var si = 0; si < segments.length; si++) {
+    if (segments[si].type === 'text') {
+      var txt = segments[si].content;
+      var jm = txt.match(/\\{[\\s\\S]*?"headers"\\s*:\\s*\\[[\\s\\S]*?"rows"\\s*:\\s*\\[[\\s\\S]*?\\}/);
+      if (jm) { try { JSON.parse(jm[0]); segments[si] = {type:'table', content:jm[0]}; } catch(e) {} }
+    }
+  }
   return segments;
 }
 
