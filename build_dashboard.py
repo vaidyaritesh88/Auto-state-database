@@ -323,7 +323,7 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
 .chat-setup .chat-help a{color:#2563eb}
 #chat-interface{display:flex;flex-direction:column;height:calc(100vh - 160px);min-height:500px}
 .chat-toolbar{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #e5e7eb;margin-bottom:8px;flex-shrink:0;flex-wrap:wrap;align-items:center}
-.chat-toolbar .chat-model-info{margin-left:auto;font-size:11px;color:#9ca3af}
+.chat-model-selector{margin-left:auto;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;padding:3px 8px;font-size:11px;color:#374151;cursor:pointer;max-width:180px}
 .chat-suggestions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px 0;flex-shrink:0}
 .chat-suggestion{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;cursor:pointer;text-align:left;transition:all 0.15s;font-size:12px;color:#374151;line-height:1.4}
 .chat-suggestion:hover{border-color:#2563eb;background:#eff6ff}
@@ -564,9 +564,11 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
   <div id="chat-setup" class="chat-setup">
     <h3>&#129302; Chat with Your Data</h3>
     <p>Ask questions, create charts, run calculations on your auto industry data using AI.</p>
-    <input type="password" id="api-key-input" placeholder="Enter your Anthropic API key (sk-ant-...)">
+    <label style="font-weight:600;margin-bottom:4px;display:block;font-size:13px">Select Model:</label>
+    <select id="sel-chat-model" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:12px;background:#fff;cursor:pointer"></select>
+    <input type="password" id="api-key-input" placeholder="Enter your API key">
     <button class="btn btn-primary" id="btn-save-key" style="width:100%">Save &amp; Start Chatting</button>
-    <p class="chat-help">Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></p>
+    <p class="chat-help" id="chat-key-help">Get your API key from <a id="chat-key-link" href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></p>
   </div>
   <div id="chat-interface" style="display:none">
     <div class="chat-toolbar">
@@ -574,7 +576,7 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
       <button class="btn btn-outline" id="btn-chat-export" style="font-size:12px;padding:4px 12px">&#128190; Export Saved</button>
       <button class="btn btn-outline" id="btn-chat-remove-key" style="font-size:12px;padding:4px 12px">&#128274; Remove Key</button>
       <button class="btn btn-outline" id="btn-chat-download-data" style="font-size:12px;padding:4px 12px" title="Download all data as CSV for use with any AI tool">&#128229; Download Data CSV</button>
-      <span class="chat-model-info">Model: Claude Sonnet</span>
+      <select id="sel-toolbar-model" class="chat-model-selector"></select>
     </div>
     <div class="chat-suggestions" id="chat-suggestions">
       <div class="chat-suggestion" data-prompt="What are the top 5 companies by market share in the latest quarter? Show a table.">
@@ -692,8 +694,28 @@ const selectedPeriods = {overview: NQ-1, company: NQ-1, state: NQ-1, zone: NQ-1,
 
 // Chat state
 let chatHistory = []; // [{id, role, content, timestamp, saved, renderedHTML}]
-let chatApiKey = '';
-try { chatApiKey = localStorage.getItem('janchor_api_key') || ''; } catch(e) {}
+var CHAT_MODELS = {
+  'claude-sonnet': { provider:'anthropic', name:'Claude Sonnet', model:'claude-sonnet-4-20250514', keyPrefix:'sk-ant-', keyPlaceholder:'Enter Anthropic API key (sk-ant-...)', keyLink:'https://console.anthropic.com/settings/keys', keyLinkLabel:'console.anthropic.com' },
+  'gemini-flash': { provider:'google', name:'Gemini 2.5 Flash', model:'gemini-2.5-flash-preview-05-20', keyPrefix:'AIza', keyPlaceholder:'Enter Google AI API key (AIza...)', keyLink:'https://aistudio.google.com/apikey', keyLinkLabel:'aistudio.google.com' },
+  'gemini-pro': { provider:'google', name:'Gemini 2.5 Pro', model:'gemini-2.5-pro-preview-06-05', keyPrefix:'AIza', keyPlaceholder:'Enter Google AI API key (AIza...)', keyLink:'https://aistudio.google.com/apikey', keyLinkLabel:'aistudio.google.com' }
+};
+var selectedModel = 'claude-sonnet';
+try { selectedModel = localStorage.getItem('janchor_selected_model') || 'claude-sonnet'; } catch(e) {}
+if (!CHAT_MODELS[selectedModel]) selectedModel = 'claude-sonnet';
+
+// Per-provider API keys
+var chatApiKeys = {};
+try { chatApiKeys = JSON.parse(localStorage.getItem('janchor_api_keys') || '{}'); } catch(e) { chatApiKeys = {}; }
+// Migrate old single key
+(function() {
+  var oldKey = null;
+  try { oldKey = localStorage.getItem('janchor_api_key'); } catch(e) {}
+  if (oldKey && !chatApiKeys['anthropic']) {
+    chatApiKeys['anthropic'] = oldKey;
+    try { localStorage.setItem('janchor_api_keys', JSON.stringify(chatApiKeys)); localStorage.removeItem('janchor_api_key'); } catch(e) {}
+  }
+})();
+function getChatApiKey() { return chatApiKeys[CHAT_MODELS[selectedModel].provider] || ''; }
 try { chatHistory = JSON.parse(localStorage.getItem('janchor_chat_history') || '[]'); } catch(e) { chatHistory = []; }
 
 function getViewMode() { return viewModes[currentTab]; }
@@ -2496,15 +2518,58 @@ document.getElementById('geoChips-company').querySelectorAll('.view-chip').forEa
 // ============================================
 // CHAT WITH DATA
 // ============================================
+function populateModelDropdown(selEl) {
+  selEl.textContent = '';
+  Object.keys(CHAT_MODELS).forEach(function(k) {
+    var opt = document.createElement('option');
+    opt.value = k; opt.textContent = CHAT_MODELS[k].name;
+    if (k === selectedModel) opt.selected = true;
+    selEl.appendChild(opt);
+  });
+}
+
+function switchModel(modelKey) {
+  if (!CHAT_MODELS[modelKey]) return;
+  selectedModel = modelKey;
+  try { localStorage.setItem('janchor_selected_model', modelKey); } catch(e) {}
+  if (!getChatApiKey()) {
+    renderChatTab();
+  } else {
+    var setupSel = document.getElementById('sel-chat-model');
+    var toolbarSel = document.getElementById('sel-toolbar-model');
+    if (setupSel) setupSel.value = modelKey;
+    if (toolbarSel) toolbarSel.value = modelKey;
+  }
+}
+
+function updateSetupForModel() {
+  var cfg = CHAT_MODELS[selectedModel];
+  var inp = document.getElementById('api-key-input');
+  var helpLink = document.getElementById('chat-key-link');
+  if (inp) inp.placeholder = cfg.keyPlaceholder;
+  if (helpLink) { helpLink.href = cfg.keyLink; helpLink.textContent = cfg.keyLinkLabel; }
+}
+
 function renderChatTab() {
   const setup = document.getElementById('chat-setup');
   const iface = document.getElementById('chat-interface');
-  if (!chatApiKey) { setup.style.display='block'; iface.style.display='none'; return; }
+  var setupSel = document.getElementById('sel-chat-model');
+  if (setupSel) {
+    populateModelDropdown(setupSel);
+    setupSel.onchange = function() { selectedModel = this.value; try { localStorage.setItem('janchor_selected_model', this.value); } catch(e) {} updateSetupForModel(); };
+  }
+  updateSetupForModel();
+  if (!getChatApiKey()) { setup.style.display='block'; iface.style.display='none'; return; }
   setup.style.display='none'; iface.style.display='flex';
+  var toolbarSel = document.getElementById('sel-toolbar-model');
+  if (toolbarSel) {
+    populateModelDropdown(toolbarSel);
+    toolbarSel.onchange = function() { switchModel(this.value); };
+  }
   const msgs = document.getElementById('chat-messages');
   const sugs = document.getElementById('chat-suggestions');
   if (chatHistory.length === 0) {
-    sugs.style.display='grid'; msgs.innerHTML='';
+    sugs.style.display='grid'; while(msgs.firstChild) msgs.removeChild(msgs.firstChild);
   } else {
     sugs.style.display='none';
     renderAllChatMessages();
@@ -2790,6 +2855,71 @@ function removeTypingIndicator() {
   if (el) el.remove();
 }
 
+function buildApiRequest(systemPrompt, messages) {
+  var cfg = CHAT_MODELS[selectedModel];
+  var key = getChatApiKey();
+  if (cfg.provider === 'anthropic') {
+    return {
+      url: 'https://api.anthropic.com/v1/messages',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: {
+        model: cfg.model,
+        max_tokens: 4096,
+        system: [{type:'text', text: systemPrompt, cache_control:{type:'ephemeral'}}],
+        messages: messages
+      }
+    };
+  } else if (cfg.provider === 'google') {
+    var contents = messages.map(function(m) {
+      return { role: m.role === 'assistant' ? 'model' : 'user', parts: [{text: m.content}] };
+    });
+    return {
+      url: 'https://generativelanguage.googleapis.com/v1beta/models/' + cfg.model + ':generateContent?key=' + key,
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        systemInstruction: { parts: [{text: systemPrompt}] },
+        contents: contents,
+        generationConfig: { maxOutputTokens: 8192 }
+      }
+    };
+  }
+}
+
+function parseApiResponse(provider, data) {
+  if (provider === 'anthropic') {
+    return (data.content && data.content[0] && data.content[0].text) || 'No response received.';
+  } else if (provider === 'google') {
+    return (data.candidates && data.candidates[0] && data.candidates[0].content &&
+      data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+      data.candidates[0].content.parts[0].text) || 'No response received.';
+  }
+  return 'No response received.';
+}
+
+function logApiUsage(provider, data) {
+  if (provider === 'anthropic' && data.usage) {
+    var u = data.usage;
+    var cacheRead = u.cache_read_input_tokens || 0;
+    var cacheCreate = u.cache_creation_input_tokens || 0;
+    var totalIn = u.input_tokens || 0;
+    if (cacheRead > 0) {
+      console.log('[Chat Cost] ' + CHAT_MODELS[selectedModel].name + ' | Input: ' + totalIn + ' tokens, Cache READ: ' + cacheRead + ' (90% cheaper), Output: ' + (u.output_tokens||0));
+    } else if (cacheCreate > 0) {
+      console.log('[Chat Cost] ' + CHAT_MODELS[selectedModel].name + ' | Input: ' + totalIn + ' tokens, Cache WRITE: ' + cacheCreate + ' (first call), Output: ' + (u.output_tokens||0));
+    } else {
+      console.log('[Chat Cost] ' + CHAT_MODELS[selectedModel].name + ' | Input: ' + totalIn + ' tokens, Output: ' + (u.output_tokens||0));
+    }
+  } else if (provider === 'google' && data.usageMetadata) {
+    var g = data.usageMetadata;
+    console.log('[Chat Cost] ' + CHAT_MODELS[selectedModel].name + ' | Input: ' + (g.promptTokenCount||0) + ' tokens, Output: ' + (g.candidatesTokenCount||0) + ' tokens, Total: ' + (g.totalTokenCount||0));
+  }
+}
+
 async function sendChatMessage(userText) {
   if (!userText || !userText.trim()) return;
   userText = userText.trim();
@@ -2821,20 +2951,12 @@ async function sendChatMessage(userText) {
   if (cleaned.length > 0 && cleaned[0].role !== 'user') cleaned.shift();
 
   try {
-    var response = await fetch('https://api.anthropic.com/v1/messages', {
+    var cfg = CHAT_MODELS[selectedModel];
+    var apiReq = buildApiRequest(buildSystemPrompt(), cleaned);
+    var response = await fetch(apiReq.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': chatApiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        system: [{type:'text', text: buildSystemPrompt(), cache_control:{type:'ephemeral'}}],
-        messages: cleaned
-      })
+      headers: apiReq.headers,
+      body: JSON.stringify(apiReq.body)
     });
 
     removeTypingIndicator();
@@ -2842,10 +2964,10 @@ async function sendChatMessage(userText) {
     if (!response.ok) {
       var errData = {};
       try { errData = await response.json(); } catch(e2) {}
-      var errMsg = response.status === 401 ? 'Invalid API key. Please check your key in Settings.'
+      var errMsg = response.status === 401 || response.status === 403 ? 'Invalid API key. Please check your ' + cfg.name + ' key.'
         : response.status === 429 ? 'Rate limited. Please wait a moment and try again.'
-        : response.status === 529 ? 'Claude is overloaded. Please try again shortly.'
-        : 'API error (' + response.status + '): ' + (errData.error?.message || 'Unknown error');
+        : response.status === 529 ? cfg.name + ' is overloaded. Please try again shortly.'
+        : 'API error (' + response.status + '): ' + (errData.error?.message || (errData.error?.errors && errData.error.errors[0]?.message) || 'Unknown error');
       var errMsgObj = addChatMessage('assistant', errMsg);
       container.appendChild(createMsgDiv(errMsgObj));
       container.scrollTop = container.scrollHeight;
@@ -2853,22 +2975,8 @@ async function sendChatMessage(userText) {
     }
 
     var data = await response.json();
-    var assistantText = (data.content && data.content[0] && data.content[0].text) || 'No response received.';
-
-    // Log cache usage for cost visibility
-    if (data.usage) {
-      var u = data.usage;
-      var cacheRead = u.cache_read_input_tokens || 0;
-      var cacheCreate = u.cache_creation_input_tokens || 0;
-      var totalIn = u.input_tokens || 0;
-      if (cacheRead > 0) {
-        console.log('[Chat Cost] Input: ' + totalIn + ' tokens, Cache READ: ' + cacheRead + ' (90% cheaper), Output: ' + (u.output_tokens||0));
-      } else if (cacheCreate > 0) {
-        console.log('[Chat Cost] Input: ' + totalIn + ' tokens, Cache WRITE: ' + cacheCreate + ' (first call), Output: ' + (u.output_tokens||0));
-      } else {
-        console.log('[Chat Cost] Input: ' + totalIn + ' tokens, Output: ' + (u.output_tokens||0));
-      }
-    }
+    var assistantText = parseApiResponse(cfg.provider, data);
+    logApiUsage(cfg.provider, data);
 
     var assistantMsg = addChatMessage('assistant', assistantText);
     container.appendChild(createMsgDiv(assistantMsg));
@@ -2995,9 +3103,10 @@ function clearChat() {
 }
 
 function removeChatApiKey() {
-  if (!confirm('Remove your API key? You will need to re-enter it to use chat.')) return;
-  chatApiKey = '';
-  try { localStorage.removeItem('janchor_api_key'); } catch(e) {}
+  var cfg = CHAT_MODELS[selectedModel];
+  if (!confirm('Remove your ' + cfg.name + ' API key? You will need to re-enter it to use chat with this provider.')) return;
+  delete chatApiKeys[cfg.provider];
+  try { localStorage.setItem('janchor_api_keys', JSON.stringify(chatApiKeys)); } catch(e) {}
   renderChatTab();
 }
 
@@ -3005,9 +3114,13 @@ function removeChatApiKey() {
 (function() {
   document.getElementById('btn-save-key').onclick = function() {
     var key = document.getElementById('api-key-input').value.trim();
-    if (!key || !key.startsWith('sk-')) { alert('Please enter a valid Anthropic API key (starts with sk-ant-...)'); return; }
-    chatApiKey = key;
-    try { localStorage.setItem('janchor_api_key', key); } catch(e) {}
+    var cfg = CHAT_MODELS[selectedModel];
+    if (!key || !key.startsWith(cfg.keyPrefix)) {
+      alert('Please enter a valid ' + cfg.name + ' API key (starts with ' + cfg.keyPrefix + '...)');
+      return;
+    }
+    chatApiKeys[cfg.provider] = key;
+    try { localStorage.setItem('janchor_api_keys', JSON.stringify(chatApiKeys)); } catch(e) {}
     renderChatTab();
   };
   document.getElementById('btn-chat-send').onclick = function() {
