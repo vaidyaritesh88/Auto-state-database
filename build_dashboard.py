@@ -2755,12 +2755,14 @@ function renderSegment(seg, container, msgId) {
 
 function executeChatCode(code) {
   try {
+    var preamble = 'var data = ROWS;\nvar rows = ROWS;\nvar quarters = Q;\nvar fys = FYS;\nvar states = segStates;\nvar companies = segCompanies;\n';
+    var fullCode = preamble + code;
     var result;
     try {
-      result = (new Function(code))();
+      result = (new Function(fullCode))();
     } catch(e1) {
       if (e1 instanceof SyntaxError) {
-        result = eval(code);
+        result = eval(fullCode);
       } else { throw e1; }
     }
     return {success:true, result:result};
