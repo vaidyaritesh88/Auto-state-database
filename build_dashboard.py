@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Janchor Auto Tracker - Dashboard Generator v2
+Auto Primary Sales Tracker - Dashboard Generator v2
 
 Usage:
   python build_dashboard.py                    # Build using existing data.json
@@ -227,7 +227,7 @@ html = '''<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Janchor Auto Tracker</title>
+<title>Auto Primary Sales Tracker</title>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <style>
@@ -361,7 +361,7 @@ tr.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #d1d5db}
 </head>
 <body>
 <div class="header">
-  <h1>JANCHOR AUTO TRACKER</h1>
+  <h1>AUTO PRIMARY SALES TRACKER</h1>
   <div class="seg-tabs" id="segTabs">
     <div class="seg-tab active" data-seg="2W">2W</div>
     <div class="seg-tab" data-seg="PV">PV</div>
@@ -2629,7 +2629,7 @@ function simpleMarkdown(text) {
 }
 
 function parseAssistantResponse(text) {
-  const segments = [];
+  var segments = [];
   const regex = /```(js|javascript|json|chart|table)\\n([\\s\\S]*?)```/g;
   let last = 0, match;
   while ((match = regex.exec(text)) !== null) {
