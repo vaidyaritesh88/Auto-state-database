@@ -2643,6 +2643,28 @@ function parseAssistantResponse(text) {
     last = regex.lastIndex;
   }
   if (last < text.length) segments.push({type:'text', content:text.slice(last)});
+  // Detect bare ``` fences (no language tag) containing JSON tables/charts
+  var bareRegex = /```\\n([\\s\\S]*?)```/g;
+  var newSegs = [];
+  segments.forEach(function(seg) {
+    if (seg.type !== 'text') { newSegs.push(seg); return; }
+    var txt = seg.content, bLast = 0, bm;
+    bareRegex.lastIndex = 0;
+    var found = false;
+    while ((bm = bareRegex.exec(txt)) !== null) {
+      found = true;
+      if (bm.index > bLast) newSegs.push({type:'text', content:txt.slice(bLast, bm.index)});
+      try {
+        var obj = JSON.parse(bm[1]);
+        var bType = (obj.headers || obj.render === 'table') ? 'table' : (obj.data || obj.traces) ? 'chart' : 'text';
+        newSegs.push({type:bType, content:bm[1]});
+      } catch(e) { newSegs.push({type:'text', content:bm[0]}); }
+      bLast = bareRegex.lastIndex;
+    }
+    if (found && bLast < txt.length) newSegs.push({type:'text', content:txt.slice(bLast)});
+    if (!found) newSegs.push(seg);
+  });
+  segments = newSegs;
   // Detect bare JSON table objects not in code fences
   for (var si = 0; si < segments.length; si++) {
     if (segments[si].type === 'text') {
@@ -2661,6 +2683,16 @@ function renderSegment(seg, container, msgId) {
     container.appendChild(d);
   } else if (seg.type === 'js') {
     const result = executeChatCode(seg.content);
+    if (result.success && result.result && typeof result.result === 'object') {
+      var r = result.result;
+      if (r.headers && r.rows) {
+        renderSegment({type:'table', content:JSON.stringify(r)}, container, msgId);
+        return;
+      } else if (r.data || r.traces) {
+        renderSegment({type:'chart', content:JSON.stringify(r)}, container, msgId);
+        return;
+      }
+    }
     const d = document.createElement('div');
     d.className = 'chat-code-result' + (result.success ? '' : ' chat-code-error');
     if (result.success) {
