@@ -2531,7 +2531,13 @@ function renderSegment(seg, container, msgId) {
 
 function executeChatCode(code) {
   try {
-    var preamble = 'var data = ROWS;\nvar rows = ROWS;\nvar quarters = Q;\nvar fys = FYS;\nvar states = segStates;\nvar companies = segCompanies;\n';
+    var preamble = '';
+    if (!/\b(var|let|const)\s+data\b/.test(code)) preamble += 'var data = ROWS;\n';
+    if (!/\b(var|let|const)\s+rows\b/.test(code)) preamble += 'var rows = ROWS;\n';
+    if (!/\b(var|let|const)\s+quarters\b/.test(code)) preamble += 'var quarters = Q;\n';
+    if (!/\b(var|let|const)\s+fys\b/.test(code)) preamble += 'var fys = FYS;\n';
+    if (!/\b(var|let|const)\s+states\b/.test(code)) preamble += 'var states = segStates;\n';
+    if (!/\b(var|let|const)\s+companies\b/.test(code)) preamble += 'var companies = segCompanies;\n';
     var fullCode = preamble + code;
     var result;
     try {
