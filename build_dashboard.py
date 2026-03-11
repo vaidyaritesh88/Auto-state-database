@@ -2858,10 +2858,10 @@ function buildSystemPrompt() {
   'First data row is INDUSTRY TOTAL (sum of all companies) for market share computation.\\n' +
   buildFullSegmentData() + '\\n\\n' +
   buildCrossSegSummary() + '\\n\\n' +
-  'CRITICAL RULES FOR ```js CODE BLOCKS:\n' +
-  '- Data is PRE-LOADED. NEVER parse text or use .split(). NEVER reference a variable called "data".\n' +
-  '- ROWS is a 2D array: ROWS[i] = [segment, subsegment, zone, state, manufacturer, vol_q1, vol_q2, ...]\n' +
-  '- ALWAYS use these helper functions (they are global, ready to call):\n' +
+  'CRITICAL RULES FOR ```js CODE BLOCKS:\\n' +
+  '- Data is PRE-LOADED. NEVER parse text or use .split(). NEVER reference a variable called "data".\\n' +
+  '- ROWS is a 2D array: ROWS[i] = [segment, subsegment, zone, state, manufacturer, vol_q1, vol_q2, ...]\\n' +
+  '- ALWAYS use these helper functions (they are global, ready to call):\\n' +
   '- getIndustryVols(sub), getCompanyVols(co, sub) -> quarterly arrays\\n' +
   '- getStateIndustryVols(state, sub), getStateCompanyVols(state, co, sub)\\n' +
   '- getZoneIndustryVols(zone, sub), getZoneCompanyVols(zone, co, sub)\\n' +
